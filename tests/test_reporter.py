@@ -1,21 +1,27 @@
 import unittest
-from unittest.mock import patch
+import tempfile
 from pathlib import Path
+from openpyxl import load_workbook
 
 from job_finder import reporter
+from tests.fixtures.report_rows import load_fixture
 
 
-class NodeResolutionTests(unittest.TestCase):
-    def test_find_node_executable_found(self):
-        with patch('shutil.which', return_value=str(Path('node'))):
-            p = reporter.find_node_executable()
-            self.assertIsInstance(p, Path)
-
-    def test_find_node_executable_missing(self):
-        with patch('shutil.which', return_value=None):
-            with self.assertRaises(FileNotFoundError) as cm:
-                reporter.find_node_executable()
-            self.assertIn('Node.js executable not found', str(cm.exception))
+class ReporterTests(unittest.TestCase):
+    def test_generate_report_creates_xlsx_and_hyperlinks(self):
+        rows = load_fixture()
+        with tempfile.TemporaryDirectory() as td:
+            outdir = Path(td)
+            output = reporter.generate_report(rows, outdir)
+            self.assertTrue(output.exists())
+            wb = load_workbook(output)
+            # Check that a sheet exists and that hyperlink cells contain hyperlinks
+            sheet = wb['Top Matches']
+            # Find first data row (row 4), original_url at column Z (26), application_url at AA (27)
+            orig_cell = sheet.cell(row=4, column=26)
+            app_cell = sheet.cell(row=4, column=27)
+            self.assertTrue(orig_cell.hyperlink is not None)
+            self.assertTrue(app_cell.hyperlink is not None)
 
 
 if __name__ == '__main__':
