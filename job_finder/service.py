@@ -8,7 +8,7 @@ from .scoring import score
 
 
 def collect(settings, limit: int) -> tuple[int, int]:
-    store = JobStore(settings.database_path)
+    store = JobStore(getattr(settings, 'database_url', None) or settings.database_path)
     client = FirecrawlClient(settings.firecrawl_api_key, settings.firecrawl_base_url, getattr(settings, 'firecrawl_request_delay_seconds', 1.25), getattr(settings, 'firecrawl_max_concurrency', 2))
     accepted = 0
     try:

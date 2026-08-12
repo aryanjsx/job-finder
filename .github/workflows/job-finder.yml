@@ -24,6 +24,7 @@ jobs:
       SCHEDULER_ENABLED: "false"
 
       DATABASE_PATH: data/job_finder.db
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       REPORT_DIR: reports
 
     steps:

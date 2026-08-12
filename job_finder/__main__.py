@@ -18,7 +18,7 @@ def main() -> None:
     settings = Settings.from_env()
     if args.command == 'collect':
         discovered, stored = collect(settings, args.limit); logging.info('Collection complete: searched %s candidates, stored %s listings.', discovered, stored); return
-    store = JobStore(settings.database_path)
+    store = JobStore(getattr(settings, 'database_url', None) or settings.database_path)
     try:
         rows = store.report_rows(); report = generate_report(rows, settings.report_dir); sent = send_report(settings, report, rows); logging.info('Report created at %s; email sent: %s', report, sent)
     finally: store.close()

@@ -21,6 +21,7 @@ class Settings:
     firecrawl_api_key: str
     firecrawl_base_url: str
     database_path: Path
+    database_url: str | None
     report_dir: Path
     email_enabled: bool
     smtp_host: str
@@ -41,6 +42,7 @@ class Settings:
             firecrawl_api_key=os.getenv('FIRECRAWL_API_KEY', ''),
             firecrawl_base_url=os.getenv('FIRECRAWL_BASE_URL', 'https://api.firecrawl.dev').rstrip('/'),
             database_path=Path(os.getenv('DATABASE_PATH', 'data/job_finder.db')),
+            database_url=os.getenv('DATABASE_URL'),
             report_dir=Path(os.getenv('REPORT_DIR', 'reports')),
             email_enabled=truthy(os.getenv('EMAIL_ENABLED', 'false')),
             smtp_host=os.getenv('SMTP_HOST', ''), smtp_port=int(os.getenv('SMTP_PORT', '587')),
