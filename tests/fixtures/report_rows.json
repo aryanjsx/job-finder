@@ -1,0 +1,28 @@
+[
+  {
+    "job_id": "sample-1",
+    "company": "Example Product Technology",
+    "title": "Cloud Engineer",
+    "location": "Hyderabad, India",
+    "work_mode": "Hybrid",
+    "salary": "10 LPA",
+    "experience": "2-4 years",
+    "posting_date": "2026-08-12",
+    "source": "Company careers",
+    "original_url": "https://careers.example.com/jobs/1",
+    "application_url": "https://careers.example.com/jobs/1/apply",
+    "external_job_id": "EX-1",
+    "match_score": 86,
+    "recommendation": "APPLY IMMEDIATELY",
+    "first_seen": "2026-08-12T06:00:00+00:00",
+    "status": "NEW",
+    "company_type": "Product company",
+    "primary_skills": "Python, Azure, Kubernetes",
+    "matching_skills": "Python, Azure, Linux, CI/CD",
+    "skill_gaps": "Terraform",
+    "cloud_devops_match": "High",
+    "why_it_matches": "Strong cloud and Python alignment.",
+    "potential_concerns": "None observed",
+    "freshness": "0–6 hours"
+  }
+]
