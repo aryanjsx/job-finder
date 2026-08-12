@@ -6,7 +6,7 @@ from job_finder.scoring import score
 
 class ScoringTests(unittest.TestCase):
     def test_target_cloud_role_scores_as_actionable(self):
-        job = Job(company='Example Product Technology', title='Cloud Engineer', location='Hyderabad, India', work_mode='Hybrid', experience='2-4 years', posting_date='2026-08-12', description='Python Azure Linux CI/CD Docker Kubernetes Terraform REST APIs')
+        job = Job(company='Example Product Technology', title='Cloud Engineer', location='Hyderabad, India', work_mode='Hybrid', experience='2-4 years', posting_date='Unknown', original_url_verified=True, description='Python Azure Linux CI/CD Docker Kubernetes Terraform REST APIs')
         scored = score(job)
         self.assertGreaterEqual(scored.match_score, 70)
         self.assertEqual(scored.recommendation, 'APPLY')
