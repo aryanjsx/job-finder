@@ -15,7 +15,7 @@ jobs:
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       EMAIL_TO: ${{ secrets.EMAIL_TO }}
-      
+
       SMTP_HOST: "smtp.gmail.com"
       SMTP_PORT: "587"
 
@@ -23,7 +23,6 @@ jobs:
       SMTP_USE_TLS: "true"
       SCHEDULER_ENABLED: "false"
 
-      DATABASE_PATH: data/job_finder.db
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       REPORT_DIR: reports
 
@@ -48,7 +47,7 @@ jobs:
       - name: Run job collection
         run: |
           echo "Running collect..."
-          python -m job_finder collect --limit 50
+          python -m job_finder collect --limit 100
 
       - name: Finalize report and send email
         run: |
