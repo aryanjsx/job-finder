@@ -35,6 +35,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Install Node dependencies
+        run: |
+          # Install the artifact tool required by tools/build_report.mjs
+          npm install @oai/artifact-tool
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
