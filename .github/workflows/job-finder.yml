@@ -1,12 +1,17 @@
-name: Job Finder Manual Test
+name: Job Finder
 
 on:
   workflow_dispatch:
 
+  schedule:
+    - cron: "30 2 * * *"
+    - cron: "30 9 * * *"
+    - cron: "30 16 * * *"
+
 jobs:
-  manual-test-run:
-    name: Manual test run
+  job-finder:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     env:
       FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
@@ -46,10 +51,8 @@ jobs:
 
       - name: Run job collection
         run: |
-          echo "Running collect..."
-          python -m job_finder collect --limit 100
+          python -m job_finder collect --limit 50
 
       - name: Finalize report and send email
         run: |
-          echo "Running finalize..."
           python -m job_finder finalize
