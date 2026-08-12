@@ -1,0 +1,49 @@
+name: Job Finder Manual Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  manual-test-run:
+    name: Manual test run
+    runs-on: ubuntu-latest
+    env:
+      FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      EMAIL_TO: ${{ secrets.EMAIL_TO }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      EMAIL_ENABLED: 'true'
+      SMTP_USE_TLS: 'true'
+      SCHEDULER_ENABLED: 'false'
+      DATABASE_PATH: data/job_finder.db
+      REPORT_DIR: reports
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Ensure workspace directories exist
+        run: |
+          mkdir -p data reports
+
+      - name: Run job collection
+        run: |
+          echo "Running collect..."
+          python -m job_finder collect --limit 50
+
+      - name: Finalize report and send email
+        run: |
+          echo "Running finalize..."
+          python -m job_finder finalize
