@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timezone
 
+from .extractors import cloud_match, skill_gaps, terms
 from .models import Job
 from .profile import CLOUD_SKILLS, EXCLUDED_TERMS, LOCATIONS, PREFERRED_COMPANY_TERMS, SKILLS, TARGET_ROLES
 
@@ -12,7 +13,7 @@ def _text(job: Job) -> str:
 
 
 def _terms(text: str, vocabulary: set[str]) -> list[str]:
-    return sorted(term for term in vocabulary if term in text)
+    return terms(text, vocabulary)
 
 
 def _years(experience: str) -> tuple[int | None, int | None]:
@@ -59,14 +60,13 @@ def score(job: Job) -> Job:
     cloud = _terms(text, CLOUD_SKILLS)
     job.primary_skills = sorted(set(matched + cloud))
     job.matching_skills = matched
-    job.skill_gaps = sorted({'docker', 'kubernetes', 'terraform'} - set(cloud))[:3]
+    job.skill_gaps = skill_gaps(text, SKILLS)
     technical = min(30, round(30 * len(matched) / 8))
     role = 20 if any(role in job.title.lower() for role in TARGET_ROLES) else 0
     low, high = _years(job.experience)
     experience = 15 if low is None or (low <= 5 and (high is None or high >= 2)) else 0
     location = 10 if any(place in text for place in LOCATIONS) else 0
-    cloud_points = min(10, round(10 * len(cloud) / 3))
-    job.cloud_devops_match = 'High' if cloud_points >= 7 else 'Medium' if cloud_points >= 3 else 'Low'
+    job.cloud_devops_match, cloud_points, _core = cloud_match(text)
     company = 5 if any(term in (job.company + ' ' + job.description).lower() for term in PREFERRED_COMPANY_TERMS) else 2
     salary = 5 if any(marker in job.salary.lower() for marker in ('10', '12', '15', 'lpa', 'lakh')) and job.salary != 'Not disclosed' else 0
     job.freshness, fresh_points = freshness(job.posting_date)

@@ -11,6 +11,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from .extractors import derive_company_title, extract_experience
+from .extractors import normalize_location as _normalize_location
 from .models import Job
 
 LOGGER = logging.getLogger(__name__)
@@ -70,18 +72,7 @@ def search_items(response: Mapping[str, Any]) -> list[Any]:
     LOGGER.warning('Unexpected Firecrawl search data shape: %s', type(data).__name__); return []
 
 
-def normalize_location(value: str, title: str, company: str) -> tuple[str, bool]:
-    """Validate location evidence without allowing title/description contamination."""
-    clean = re.sub(r'\s+', ' ', (value or '').strip(' #*-'))
-    lowered = clean.lower()
-    if not clean or lowered in {title.lower().strip(), company.lower().strip()} or len(clean) > 100:
-        return 'Unknown', False
-    if not any(term in lowered for term in LOCATION_TERMS): return 'Unknown', False
-    if 'remote' in lowered:
-        return ('Remote - India' if 'india' in lowered else 'Remote - India eligibility unknown'), True
-    for city in ('Hyderabad', 'Gurgaon', 'Gurugram', 'Noida', 'Delhi NCR', 'Delhi', 'Kolkata'):
-        if city.lower() in lowered: return (city + (', India' if 'india' in lowered and city != 'Delhi NCR' else ''), True)
-    return ('India' if lowered in {'india', 'india - remote'} else clean, True)
+normalize_location = _normalize_location   # re-exported for existing imports
 
 
 class FirecrawlClient:
@@ -167,9 +158,7 @@ class FirecrawlClient:
         title = candidate.title or str(metadata.get('title') or '')
         if not title:
             match = re.search(r'^#{1,2}\s+(.+)$', markdown, re.MULTILINE); title = match.group(1).strip() if match else ''
-        host_parts = urlparse(candidate.url).path.strip('/').split('/')
-        company = host_parts[0] if urlparse(candidate.url).netloc == 'jobs.lever.co' and host_parts else ''
-        if ' - ' in title: company, title = title.split(' - ', 1)
+        company, title = derive_company_title(candidate.url, title)
         if not company or not title:
             LOGGER.info('Skipping incomplete listing %s', candidate.url); return None
         location = 'Unknown'
@@ -180,8 +169,6 @@ class FirecrawlClient:
                 clean = line.strip(' #*-')
                 location, valid_location = normalize_location(clean, title, company)
                 if valid_location: break
-        experience_match = re.search(r'\b(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:\+?\s*)?(?:years?|yrs?)\b|\b(\d+)\+?\s*(?:years?|yrs?)\b', markdown, re.I)
-        experience = 'Unknown'
-        if experience_match: experience = f'{experience_match.group(1) or experience_match.group(3)}-{experience_match.group(2) or experience_match.group(3)} years'
+        experience = extract_experience(markdown)
         work_mode = 'Remote' if 'remote' in markdown.lower() else ('Hybrid' if 'hybrid' in markdown.lower() else 'Onsite' if location != 'Unknown' else 'Unknown')
-        return Job(company=company.replace('-', ' ').title(), title=title, location=location, work_mode=work_mode, experience=experience, source=candidate.source, original_url=str(metadata.get('sourceURL') or candidate.url), application_url=candidate.url, description=markdown or candidate.description, original_url_verified=any(host in candidate.url for host in ATS_HOSTS), company_type='Unknown')
+        return Job(company=company, title=title, location=location, work_mode=work_mode, experience=experience, source=candidate.source, original_url=str(metadata.get('sourceURL') or candidate.url), application_url=candidate.url, description=markdown or candidate.description, original_url_verified=any(host in candidate.url for host in ATS_HOSTS), company_type='Unknown')
