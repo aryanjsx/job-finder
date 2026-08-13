@@ -104,3 +104,13 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(salary_points('INR 600,000 - 900,000'), 1)
         self.assertIsNone(salary_lpa('USD 150,000 - 200,000'))
         self.assertEqual(salary_points('Not disclosed'), 0)
+
+    def test_role_tiers(self):
+        from job_finder.scoring import role_points
+        self.assertEqual(role_points('Software Engineer, Auth & Access'), 20)
+        self.assertEqual(role_points('Software Development Engineer II'), 20)
+        self.assertEqual(role_points('Backend Developer'), 20)
+        self.assertEqual(role_points('Site Reliability Engineer'), 14)
+        self.assertEqual(role_points('Full Stack Developer'), 14)
+        self.assertEqual(role_points('Systems Engineer'), 9)
+        self.assertEqual(role_points('Marketing Manager'), 0)

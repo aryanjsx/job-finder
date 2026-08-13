@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import logging
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
 
 def send_report(settings, report: Path, rows: list[dict]) -> bool:
+    pipeline_rows = [
+        row for row in rows
+        if row.get("recommendation") != "DO NOT INCLUDE"
+    ]
+    if not pipeline_rows:
+        logging.error("Pipeline is empty; refusing to email an empty workbook.")
+        return False
     if not settings.email_enabled:
         return False
 
@@ -20,19 +28,15 @@ def send_report(settings, report: Path, rows: list[dict]) -> bool:
     if not all(required):
         raise ValueError("SMTP settings are incomplete while EMAIL_ENABLED=true.")
 
-    new = [
-        r
-        for r in rows
-        if r.get("status") in ("NEW", "UPDATED")
-        and r.get("recommendation") != "DO NOT INCLUDE"
-    ]
+    new = [row for row in pipeline_rows if row.get("status") in ("NEW", "UPDATED")]
+    carried_over = [row for row in pipeline_rows if row.get("status") not in ("NEW", "UPDATED")]
 
     immediate = [
-        r for r in new
+        r for r in pipeline_rows
         if (r.get("match_score") or 0) >= 85
     ]
 
-    best = new[0] if new else None
+    best = max(pipeline_rows, key=lambda row: row.get("match_score") or 0, default=None)
 
     if best:
         best_job = f"{best.get('title', 'Unknown')} at {best.get('company', 'Unknown')}"
@@ -41,7 +45,7 @@ def send_report(settings, report: Path, rows: list[dict]) -> bool:
 
     salaries = [
         r.get("salary")
-        for r in new
+        for r in pipeline_rows
         if r.get("salary")
         and r.get("salary") != "Not disclosed"
     ]
@@ -50,16 +54,18 @@ def send_report(settings, report: Path, rows: list[dict]) -> bool:
 
     recommended_count = sum(
         r.get("recommendation") in ("APPLY", "APPLY IMMEDIATELY")
-        for r in new
+        for r in pipeline_rows
     )
 
     cloud_devops_count = sum(
         r.get("cloud_devops_match") == "High"
-        for r in new
+        for r in pipeline_rows
     )
 
     body = (
+        f"Pipeline matches: {len(pipeline_rows)}\n"
         f"New matches: {len(new)}\n"
+        f"Carried-over matches: {len(carried_over)}\n"
         f"85+ matches: {len(immediate)}\n"
         f"Recommended to apply: {recommended_count}\n"
         f"Best job: {best_job}\n"
@@ -70,7 +76,7 @@ def send_report(settings, report: Path, rows: list[dict]) -> bool:
     msg = EmailMessage()
     msg["Subject"] = (
         f"Daily Job Finder - {report.stem[-10:]} - "
-        f"{len(new)} New Matches"
+        f"{len(pipeline_rows)} Pipeline Matches"
     )
     msg["From"] = settings.email_from
     msg["To"] = settings.email_to
