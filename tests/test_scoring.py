@@ -84,3 +84,23 @@ class ScoringTests(unittest.TestCase):
         scraped = Job(company='A', title='Software Engineer', source='Firecrawl web search')
         scraped.freshness = 'Older than 14 days'
         self.assertTrue(is_stale(scraped))
+
+    def test_architecture_is_not_a_principal_role(self):
+        from job_finder.scoring import classify_seniority
+        self.assertEqual(classify_seniority('Software Engineer, Data Architecture'), 'MID')
+        self.assertEqual(classify_seniority('Engineer, Leadership Tools'), 'MID')
+        self.assertEqual(classify_seniority('Solutions Architect'), 'PRINCIPAL')
+        self.assertEqual(classify_seniority('Tech Lead'), 'LEAD')
+
+    def test_board_freshness_uses_the_long_scale(self):
+        from job_finder.scoring import freshness
+        self.assertEqual(freshness('2026-07-28', 'Lever board API (x)')[1], 4)
+        self.assertEqual(freshness('2026-07-28', 'Firecrawl web search')[1], 0)
+
+    def test_salary_is_parsed_not_grepped(self):
+        from job_finder.scoring import salary_lpa, salary_points
+        self.assertEqual(salary_lpa('INR 1,200,000 - 1,800,000'), 12.0)
+        self.assertEqual(salary_points('INR 1,200,000 - 1,800,000'), 5)
+        self.assertEqual(salary_points('INR 600,000 - 900,000'), 1)
+        self.assertIsNone(salary_lpa('USD 150,000 - 200,000'))
+        self.assertEqual(salary_points('Not disclosed'), 0)

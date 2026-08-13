@@ -8,7 +8,7 @@ from .config import Settings
 from .database import JobStore
 from .emailer import send_report
 from .reporter import generate_report, run_log_metrics
-from .service import collect
+from .service import collect, load_run_metrics
 
 
 def main() -> None:
@@ -24,10 +24,11 @@ def main() -> None:
     store = JobStore(getattr(settings, 'database_url', None) or settings.database_path)
     try:
         rows = store.report_rows()
-        metrics = dict(run_log_metrics(rows))
-        report = generate_report(rows, settings.report_dir)
-        if metrics['rows_in_pipeline'] == 0:
-            logging.error('Pipeline is empty; refusing to send report. Rejections: %s', metrics['rejection_reasons'])
+        run_metrics = load_run_metrics()
+        metrics = dict(run_log_metrics(rows, run_metrics))
+        report = generate_report(rows, settings.report_dir, run_metrics)
+        if metrics['db_rows_in_pipeline'] == 0:
+            logging.error('Pipeline is empty; refusing to send report. Rejections: %s', metrics['db_rejection_reasons'])
             sys.exit(1)
         sent = send_report(settings, report, rows); logging.info('Report created at %s; email sent: %s', report, sent)
     finally: store.close()

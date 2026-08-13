@@ -113,7 +113,7 @@ def _job(company: str, title: str, location: str, source: str, description: str,
     return Job(**values)
 
 
-def lever_jobs(slug: str, payload: Iterable[Any], all_locations: bool = False) -> list[Job]:
+def lever_jobs(slug: str, payload: Iterable[Any], all_locations: bool = False, metrics: dict | None = None) -> list[Job]:
     jobs, fetched, relevant = [], 0, 0
     for posting in payload or []:
         if not isinstance(posting, Mapping) or not (title := str(posting.get('text') or '').strip()):
@@ -133,10 +133,13 @@ def lever_jobs(slug: str, payload: Iterable[Any], all_locations: bool = False) -
             str(posting.get('applyUrl') or hosted), str(posting.get('id') or ''),
             str(posting.get('workplaceType') or '').title() or 'Unknown', _lever_salary(posting)))
     LOGGER.info('Lever board %s: fetched %s, India-relevant %s', slug, fetched, relevant)
+    if metrics is not None:
+        metrics['run_listings_fetched'] += fetched
+        metrics['run_india_relevant'] += relevant
     return jobs
 
 
-def ashby_jobs(slug: str, payload: Mapping[str, Any], all_locations: bool = False) -> list[Job]:
+def ashby_jobs(slug: str, payload: Mapping[str, Any], all_locations: bool = False, metrics: dict | None = None) -> list[Job]:
     jobs, fetched, relevant = [], 0, 0
     for posting in (payload.get('jobs') if isinstance(payload, Mapping) else []) or []:
         if not isinstance(posting, Mapping) or posting.get('isListed') is False or not (title := str(posting.get('title') or '').strip()):
@@ -156,10 +159,13 @@ def ashby_jobs(slug: str, payload: Mapping[str, Any], all_locations: bool = Fals
             str(posting.get('workplaceType') or '').title() or 'Unknown', _ashby_salary(posting),
             company_type=str(posting.get('department') or '').strip() or 'Unknown'))
     LOGGER.info('Ashby board %s: fetched %s, India-relevant %s', slug, fetched, relevant)
+    if metrics is not None:
+        metrics['run_listings_fetched'] += fetched
+        metrics['run_india_relevant'] += relevant
     return jobs
 
 
-def greenhouse_jobs(slug: str, payload: Mapping[str, Any], all_locations: bool = False) -> list[Job]:
+def greenhouse_jobs(slug: str, payload: Mapping[str, Any], all_locations: bool = False, metrics: dict | None = None) -> list[Job]:
     """Greenhouse exposes updated_at, never a verified posting date."""
     jobs, fetched, relevant = [], 0, 0
     for posting in (payload.get('jobs') if isinstance(payload, Mapping) else []) or []:
@@ -181,6 +187,9 @@ def greenhouse_jobs(slug: str, payload: Mapping[str, Any], all_locations: bool =
             str(posting.get('id') or ''), posting_date_verified=False,
             potential_concerns=GREENHOUSE_DATE_CONCERN))
     LOGGER.info('Greenhouse board %s: fetched %s, India-relevant %s', slug, fetched, relevant)
+    if metrics is not None:
+        metrics['run_listings_fetched'] += fetched
+        metrics['run_india_relevant'] += relevant
     return jobs
 
 
@@ -188,16 +197,20 @@ PARSERS = {'lever': (LEVER_API, lever_jobs), 'ashby': (ASHBY_API, ashby_jobs),
            'greenhouse': (GREENHOUSE_API, greenhouse_jobs)}
 
 
-def fetch_board(ats: str, slug: str, fetch=fetch_json, all_locations: bool = False) -> list[Job]:
+def fetch_board(ats: str, slug: str, fetch=fetch_json, all_locations: bool = False,
+                metrics: dict | None = None) -> list[Job]:
     if ats not in PARSERS:
         LOGGER.warning('Unknown ATS %r for slug %r', ats, slug)
         return []
     template, parser = PARSERS[ats]
-    return parser(slug, fetch(template.format(slug=slug)), all_locations)
+    found = parser(slug, fetch(template.format(slug=slug)), all_locations, metrics)
+    if metrics is not None:
+        metrics['run_boards_fetched'] += 1
+    return found
 
 
 def fetch_boards(boards: Iterable[Mapping[str, str]], fetch=fetch_json, sleep=time.sleep,
-                 all_locations: bool = False) -> list[Job]:
+                 all_locations: bool = False, metrics: dict | None = None) -> list[Job]:
     """Fetch every configured board, tolerating individual board failures."""
     jobs: list[Job] = []
     for index, board in enumerate(boards or []):
@@ -207,7 +220,7 @@ def fetch_boards(boards: Iterable[Mapping[str, str]], fetch=fetch_json, sleep=ti
         if index:
             sleep(DELAY_BETWEEN_BOARDS)
         try:
-            found = fetch_board(ats, slug, fetch, all_locations)
+            found = fetch_board(ats, slug, fetch, all_locations, metrics)
         except (HTTPError, URLError, TimeoutError, ValueError) as error:
             LOGGER.warning('Board fetch failed for %s/%s: %s', ats, slug, error)
             continue

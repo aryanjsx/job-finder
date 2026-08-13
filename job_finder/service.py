@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from pathlib import Path
 
 from .ats import fetch_boards, slugs_from_urls
 from .database import JobStore
 from .firecrawl import ATS_HOSTS, FirecrawlClient, FirecrawlError, normalize_candidate
-from .scoring import score
+from .scoring import rejection_reason, score
 
 BOARDS_PATH = Path('config/boards.json')
+RUN_METRICS_PATH = Path('data/last_run_metrics.json')
 
 
 def load_boards(path: Path = BOARDS_PATH) -> list[dict]:
@@ -42,20 +44,57 @@ def remember_boards(urls, boards: list[dict], path: Path = BOARDS_PATH) -> list[
     return new
 
 
+def load_run_metrics(path: Path = RUN_METRICS_PATH) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def save_run_metrics(metrics: dict, path: Path = RUN_METRICS_PATH) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    except OSError as exc:
+        logging.warning('Could not write run metrics %s: %s', path, exc)
+
+
 def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int, int]:
     store = JobStore(getattr(settings, 'database_url', None) or settings.database_path)
     accepted = 0
     pipeline = 0
     discovered = 0
+    run = {
+        'run_boards_fetched': 0,
+        'run_listings_fetched': 0,
+        'run_india_relevant': 0,
+        'run_new_rows': 0,
+        'run_updated_rows': 0,
+        'run_rows_in_pipeline': 0,
+        'run_rejection_reasons': Counter(),
+        'score_histogram': Counter(),
+    }
     boards_path = Path(getattr(settings, 'boards_path', BOARDS_PATH))
+    run_path = Path(getattr(settings, 'run_metrics_path', RUN_METRICS_PATH))
+
+    def store_scored(job):
+        nonlocal accepted, pipeline
+        job = score(job)
+        store.upsert(job)
+        accepted += 1
+        pipeline += job.recommendation != 'DO NOT INCLUDE'
+        run['run_new_rows'] += job.status == 'NEW'
+        run['run_updated_rows'] += job.status == 'UPDATED'
+        run['run_rows_in_pipeline'] += job.recommendation != 'DO NOT INCLUDE'
+        run['run_rejection_reasons'][rejection_reason(job)] += job.recommendation == 'DO NOT INCLUDE'
+        run['score_histogram'][f'{min(90, (job.match_score // 10) * 10)}-{min(99, (job.match_score // 10) * 10 + 9)}'] += 1
+
     try:
         boards = load_boards(boards_path)
-        for job in fetch_boards(boards, all_locations=all_locations):
+        for job in fetch_boards(boards, all_locations=all_locations, metrics=run):
             discovered += 1
-            job = score(job)
-            store.upsert(job)
-            accepted += 1
-            pipeline += job.recommendation != 'DO NOT INCLUDE'
+            store_scored(job)
         logging.info('ATS board APIs contributed %s listings from %s boards.', accepted, len(boards))
 
         try:
@@ -77,11 +116,8 @@ def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int
             candidates.append(candidate)
         learned = remember_boards([candidate.url for candidate in candidates], boards, boards_path)
         learned_slugs = {(board['ats'], board['slug'].lower()) for board in learned}
-        for job in fetch_boards(learned, all_locations=all_locations):
-            job = score(job)
-            store.upsert(job)
-            accepted += 1
-            pipeline += job.recommendation != 'DO NOT INCLUDE'
+        for job in fetch_boards(learned, all_locations=all_locations, metrics=run):
+            store_scored(job)
         harvested = {(entry['ats'], entry['slug'].lower()) for entry in slugs_from_urls([c.url for c in candidates])}
         already_covered = {(b['ats'], b['slug'].lower()) for b in boards} | learned_slugs
 
@@ -103,13 +139,14 @@ def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int
             try:
                 job = batched.get(candidate.url) if candidate.url in batched else client.scrape_job(candidate.url, candidate)
                 if job:
-                    job = score(job)
-                    store.upsert(job)
-                    accepted += 1
-                    pipeline += job.recommendation != 'DO NOT INCLUDE'
+                    store_scored(job)
             except FirecrawlError as exc:
                 logging.warning('Scrape failed: %s', exc)
         logging.info('Firecrawl failures: HTTP 400=%s, HTTP 403=%s, HTTP 429=%s, other=%s', client.failures['400'], client.failures['403'], client.failures['429'], client.failures['other'])
         return discovered, accepted, pipeline
     finally:
+        run['run_rejection_reasons'] = dict(run['run_rejection_reasons'])
+        run['score_histogram'] = dict(sorted(run['score_histogram'].items()))
+        logging.info('Run score histogram: %s', run['score_histogram'])
+        save_run_metrics(run, run_path)
         store.close()

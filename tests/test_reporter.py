@@ -40,8 +40,8 @@ class ReporterTests(unittest.TestCase):
         self.assertEqual(sheet.column_dimensions['A'].width, 5)
         self.assertEqual(sheet.column_dimensions['D'].width, 24)
         self.assertEqual(sheet.column_dimensions['E'].width, 38)
-        self.assertEqual(sheet.column_dimensions['O'].width, 46)
-        self.assertEqual(sheet.column_dimensions['Q'].width, 46)
+        self.assertEqual(sheet.column_dimensions['P'].width, 46)
+        self.assertEqual(sheet.column_dimensions['R'].width, 46)
         self.assertTrue(sheet.cell(row=4, column=5).alignment.wrap_text)
 
     def test_rejected_rows_are_separated_from_pipeline(self):
@@ -58,21 +58,29 @@ class ReporterTests(unittest.TestCase):
                                       posting_date_verified=False, location_verified=False,
                                       cloud_devops_match='Low')]
         rows[0].update(posting_date_verified=True, location_verified=True, salary='18 LPA')
-        metrics = dict(reporter.run_log_metrics(rows))
-        self.assertEqual(metrics['rows_total'], 2)
-        self.assertEqual(metrics['rows_in_pipeline'], 1)
-        self.assertEqual(metrics['rows_rejected'], 1)
-        self.assertEqual(metrics['posting_date_verified_rate'], 0.5)
-        self.assertEqual(metrics['location_verified_rate'], 0.5)
-        self.assertEqual(metrics['salary_parsed_rate'], 0.5)
-        self.assertEqual(metrics['cloud_fit_distribution'], 'High: 1, Low: 1')
+        run = {'run_boards_fetched': 2, 'run_listings_fetched': 5, 'run_india_relevant': 3,
+               'run_new_rows': 1, 'run_updated_rows': 1, 'run_rows_in_pipeline': 1,
+               'run_rejection_reasons': {'below_threshold': 1}, 'score_histogram': {'60-69': 1}}
+        metrics = dict(reporter.run_log_metrics(rows, run))
+        self.assertEqual(metrics['db_rows_total'], 2)
+        self.assertEqual(metrics['db_rows_in_pipeline'], 1)
+        self.assertEqual(metrics['db_rows_rejected'], 1)
+        self.assertEqual(metrics['db_posting_date_verified_rate'], 0.5)
+        self.assertEqual(metrics['db_location_verified_rate'], 0.5)
+        self.assertEqual(metrics['db_salary_parsed_rate'], 0.5)
+        self.assertEqual(metrics['db_cloud_fit_distribution'], 'High: 1, Low: 1')
+        self.assertEqual(metrics['run_rejection_reasons'], {'below_threshold': 1})
+        self.assertEqual(metrics['score_histogram'], {'60-69': 1})
 
-        _, workbook = self._build(rows)
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        workbook = load_workbook(reporter.generate_report(rows, Path(directory.name), run))
         sheet = workbook['Run Log']
         written = {sheet.cell(row=row, column=1).value: sheet.cell(row=row, column=2).value
                    for row in range(4, 4 + len(metrics))}
-        self.assertEqual(written['rows_total'], 2)
-        self.assertEqual(written['salary_parsed_rate'], 0.5)
+        self.assertEqual(written['db_rows_total'], 2)
+        self.assertEqual(written['db_salary_parsed_rate'], 0.5)
+        self.assertEqual(written['score_histogram'], '{"60-69": 1}')
 
 
 if __name__ == '__main__':
