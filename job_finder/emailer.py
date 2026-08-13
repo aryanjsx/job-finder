@@ -76,7 +76,7 @@ def send_report(settings, report: Path, rows: list[dict]) -> bool:
     msg = EmailMessage()
     msg["Subject"] = (
         f"Daily Job Finder - {report.stem[-10:]} - "
-        f"{len(pipeline_rows)} Pipeline Matches"
+        f"{len(pipeline_rows)} matches ({len(new)} new)"
     )
     msg["From"] = settings.email_from
     msg["To"] = settings.email_to
