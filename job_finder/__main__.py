@@ -8,12 +8,12 @@ from .config import Settings
 from .database import JobStore
 from .emailer import send_report
 from .reporter import generate_report, run_log_metrics
-from .service import collect, load_run_metrics
+from .service import collect, discover_boards, load_run_metrics
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description='Find, rank, report, and optionally email job listings.')
-    parser.add_argument('command', choices=('collect', 'finalize'))
+    parser.add_argument('command', choices=('collect', 'discover-boards', 'finalize'))
     parser.add_argument('--limit', type=int, default=25)
     parser.add_argument('--all-locations', action='store_true',
                         help='Keep global ATS board postings instead of India-relevant roles only.')
@@ -21,6 +21,8 @@ def main() -> None:
     settings = Settings.from_env()
     if args.command == 'collect':
         discovered, stored, pipeline = collect(settings, args.limit, args.all_locations); logging.info('Collection complete: searched %s candidates, stored %s listings, %s in pipeline.', discovered, stored, pipeline); return
+    if args.command == 'discover-boards':
+        discover_boards(settings, args.limit); return
     store = JobStore(getattr(settings, 'database_url', None) or settings.database_path)
     try:
         rows = store.report_rows()
