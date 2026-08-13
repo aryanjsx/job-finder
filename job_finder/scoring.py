@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 
 from .extractors import cloud_match, skill_gaps, terms
 from .models import Job
-from .profile import CLOUD_SKILLS, EXCLUDED_TERMS, LOCATIONS, PREFERRED_COMPANY_TERMS, SKILLS, TARGET_ROLES
+from .profile import CLOUD_SKILLS, LOCATIONS, PREFERRED_COMPANY_TERMS, SKILLS, TARGET_ROLES
 
 
 def _text(job: Job) -> str:
@@ -30,20 +30,24 @@ def _years(experience: str) -> tuple[float | None, float | None]:
     return (numbers[0], numbers[1] if len(numbers) > 1 else numbers[0])
 
 
-PREFERRED_LOCATIONS = tuple(p for p in LOCATIONS if p != 'india')
+INDIA_TOKENS = ('india', 'hyderabad', 'gurgaon', 'gurugram', 'noida', 'delhi', 'ncr',
+                'kolkata', 'bengaluru', 'bangalore', 'pune', 'chennai', 'mumbai')
+PREFERRED_CITIES = ('hyderabad', 'gurgaon', 'gurugram', 'noida', 'delhi', 'ncr', 'kolkata')
 
 
 def location_points(job: Job) -> int:
-    """Preferred city 10, elsewhere-in-India 5, non-India 0. Reads job.location
-    only — the description must not decide where the job is."""
+    """India-eligible only. Bare 'Remote' is ambiguous and scores 0, not 10.
+    Preferred city or India-remote = 10, elsewhere in India = 5, otherwise 0."""
     loc = (job.location or '').lower().strip()
     if not loc or loc == 'unknown':
         return 0
-    if any(p in loc for p in PREFERRED_LOCATIONS):
+    if not any(t in loc for t in INDIA_TOKENS):
+        return 0
+    if any(c in loc for c in PREFERRED_CITIES):
         return 10
-    if 'india' in loc:
-        return 5
-    return 0
+    if 'remote' in loc:
+        return 10
+    return 5
 
 
 def freshness(posting_date: str) -> tuple[str, int]:
@@ -62,8 +66,27 @@ def freshness(posting_date: str) -> tuple[str, int]:
     return 'Older than 14 days', 0
 
 
+EXCLUDED_ROLE_TERMS = ('bpo', 'call center', 'customer support', 'technical support',
+                       'support engineer', 'manual test', 'manual testing', 'qa',
+                       'data entry', 'sales', 'account executive', 'intern',
+                       'internship', 'apprentice', 'graduate trainee', 'recruiter',
+                       'content writer')
+
+
 def is_excluded(job: Job) -> bool:
-    return any(term in _text(job) for term in EXCLUDED_TERMS)
+    """Title only, word-boundary. A JD that merely mentions sales is not a sales job."""
+    return bool(terms(job.title or '', EXCLUDED_ROLE_TERMS))
+
+
+BOARD_API_MARKER = 'board API'
+
+
+def is_stale(job: Job) -> bool:
+    """Board feeds only list open postings, so createdAt age never disqualifies.
+    Freshness remains a scoring signal for every source."""
+    if BOARD_API_MARKER in (job.source or ''):
+        return False
+    return job.freshness == 'Older than 14 days'
 
 def classify_seniority(title: str) -> str:
     text = title.lower()
@@ -96,7 +119,7 @@ def score(job: Job) -> Job:
     job.match_score = technical + role + experience + location + cloud_points + company + salary + fresh_points
     too_senior = job.seniority in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'}
     outside_location = job.location_verified and location == 0
-    if is_excluded(job) or too_senior or outside_location or job.freshness == 'Older than 14 days':
+    if is_excluded(job) or too_senior or outside_location or is_stale(job):
         job.recommendation = 'DO NOT INCLUDE'
     elif job.match_score >= 85:
         job.recommendation = 'APPLY IMMEDIATELY'

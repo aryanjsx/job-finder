@@ -31,9 +31,12 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(scored.confidence, 'LOW')
 
     def test_preferred_and_outside_locations(self):
+        from job_finder.scoring import location_points
         good = score(Job(company='Acme', title='Software Engineer', location='Hyderabad, India', experience='2-5 years', posting_date='2026-08-12', original_url_verified=True))
-        bad = score(Job(company='Acme', title='Software Engineer', location='Mumbai, India', experience='2-5 years', posting_date='2026-08-12', original_url_verified=True))
-        self.assertTrue(good.location_verified); self.assertEqual(bad.recommendation, 'DO NOT INCLUDE')
+        elsewhere_in_india = score(Job(company='Acme', title='Software Engineer', location='Mumbai, India', experience='2-5 years', posting_date='2026-08-12', original_url_verified=True))
+        self.assertTrue(good.location_verified)
+        self.assertTrue(elsewhere_in_india.location_verified)
+        self.assertEqual(location_points(elsewhere_in_india), 5)
 
     def test_months_are_not_read_as_years(self):
         from job_finder.scoring import _years
@@ -55,3 +58,29 @@ class ScoringTests(unittest.TestCase):
         job = score(Job(company='Product Technology', title='Software Engineer', location='Hyderabad, India', experience='2-5 years', posting_date='Unknown', original_url_verified=True, description='Python Java React Azure Linux CI/CD Kubernetes Terraform'))
         self.assertEqual(job.confidence, 'MEDIUM')
         self.assertNotEqual(job.recommendation, 'APPLY IMMEDIATELY')
+
+    def test_jd_mentioning_sales_is_not_a_sales_job(self):
+        from job_finder.scoring import is_excluded
+        self.assertFalse(is_excluded(Job(company='A', title='Software Engineer',
+                                         description='Partner with sales engineering on escalations.')))
+        self.assertTrue(is_excluded(Job(company='A', title='Sales Engineer')))
+        self.assertTrue(is_excluded(Job(company='A', title='Technical Support Engineer')))
+
+    def test_remote_must_be_india_eligible(self):
+        from job_finder.scoring import location_points
+        mk = lambda loc: Job(company='A', title='Software Engineer', location=loc)
+        self.assertEqual(location_points(mk('Remote - India')), 10)
+        self.assertEqual(location_points(mk('Noida')), 10)
+        self.assertEqual(location_points(mk('Bengaluru, India')), 5)
+        self.assertEqual(location_points(mk('Remote - Canada')), 0)
+        self.assertEqual(location_points(mk('Remote')), 0)
+        self.assertEqual(location_points(mk('Minneapolis, MN')), 0)
+
+    def test_board_postings_are_never_rejected_for_age(self):
+        from job_finder.scoring import is_stale
+        old = Job(company='A', title='Software Engineer', source='Lever board API (meesho)')
+        old.freshness = 'Older than 14 days'
+        self.assertFalse(is_stale(old))
+        scraped = Job(company='A', title='Software Engineer', source='Firecrawl web search')
+        scraped.freshness = 'Older than 14 days'
+        self.assertTrue(is_stale(scraped))

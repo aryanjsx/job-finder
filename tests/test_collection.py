@@ -49,9 +49,10 @@ class CollectionCompatibilityTests(unittest.TestCase):
                 self.scraped.append(url)
                 return Job(company='Example Technology', title='Cloud Engineer', original_url=url, posting_date='2026-08-12', description='Python Azure CI/CD')
         with tempfile.TemporaryDirectory() as directory, patch('job_finder.service.FirecrawlClient', FakeClient):
-            discovered, stored = collect(self._settings(directory), 25)
+            discovered, stored, pipeline = collect(self._settings(directory), 25)
         self.assertEqual(discovered, 2)
         self.assertEqual(stored, 2)
+        self.assertEqual(pipeline, 2)
 
 
 class FirecrawlRequestTests(unittest.TestCase):

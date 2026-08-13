@@ -42,24 +42,27 @@ def remember_boards(urls, boards: list[dict], path: Path = BOARDS_PATH) -> list[
     return new
 
 
-def collect(settings, limit: int) -> tuple[int, int]:
+def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int, int]:
     store = JobStore(getattr(settings, 'database_url', None) or settings.database_path)
     accepted = 0
+    pipeline = 0
     discovered = 0
     boards_path = Path(getattr(settings, 'boards_path', BOARDS_PATH))
     try:
         boards = load_boards(boards_path)
-        for job in fetch_boards(boards):
+        for job in fetch_boards(boards, all_locations=all_locations):
             discovered += 1
-            store.upsert(score(job))
+            job = score(job)
+            store.upsert(job)
             accepted += 1
+            pipeline += job.recommendation != 'DO NOT INCLUDE'
         logging.info('ATS board APIs contributed %s listings from %s boards.', accepted, len(boards))
 
         try:
             client = FirecrawlClient(settings.firecrawl_api_key, settings.firecrawl_base_url, getattr(settings, 'firecrawl_request_delay_seconds', 1.25), getattr(settings, 'firecrawl_max_concurrency', 2))
         except ValueError as exc:
             logging.warning('Skipping Firecrawl discovery: %s', exc)
-            return discovered, accepted
+            return discovered, accepted, pipeline
 
         candidates = []
         raw_candidates = list(client.discover(limit))
@@ -74,9 +77,11 @@ def collect(settings, limit: int) -> tuple[int, int]:
             candidates.append(candidate)
         learned = remember_boards([candidate.url for candidate in candidates], boards, boards_path)
         learned_slugs = {(board['ats'], board['slug'].lower()) for board in learned}
-        for job in fetch_boards(learned):
-            store.upsert(score(job))
+        for job in fetch_boards(learned, all_locations=all_locations):
+            job = score(job)
+            store.upsert(job)
             accepted += 1
+            pipeline += job.recommendation != 'DO NOT INCLUDE'
         harvested = {(entry['ats'], entry['slug'].lower()) for entry in slugs_from_urls([c.url for c in candidates])}
         already_covered = {(b['ats'], b['slug'].lower()) for b in boards} | learned_slugs
 
@@ -97,10 +102,14 @@ def collect(settings, limit: int) -> tuple[int, int]:
         for candidate in candidates:
             try:
                 job = batched.get(candidate.url) if candidate.url in batched else client.scrape_job(candidate.url, candidate)
-                if job: store.upsert(score(job)); accepted += 1
+                if job:
+                    job = score(job)
+                    store.upsert(job)
+                    accepted += 1
+                    pipeline += job.recommendation != 'DO NOT INCLUDE'
             except FirecrawlError as exc:
                 logging.warning('Scrape failed: %s', exc)
         logging.info('Firecrawl failures: HTTP 400=%s, HTTP 403=%s, HTTP 429=%s, other=%s', client.failures['400'], client.failures['403'], client.failures['429'], client.failures['other'])
-        return discovered, accepted
+        return discovered, accepted, pipeline
     finally:
         store.close()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from datetime import date
@@ -12,6 +13,9 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
+
+from .models import Job
+from .scoring import classify_seniority, is_excluded, is_stale, location_points
 
 HEADER_ROW = 3
 DATA_ROW = 4
@@ -173,6 +177,32 @@ def _rate(count: int, total: int) -> float:
     return round(count / total, 2) if total else 0.0
 
 
+def rejection_reasons(rows: list[dict]) -> dict[str, int]:
+    """Classify rejected rows by the same gate order used by scoring.score()."""
+    reasons = {key: 0 for key in ('excluded_role', 'too_senior', 'outside_location', 'stale', 'below_threshold')}
+    for row in rows:
+        if not _is_rejected(row):
+            continue
+        job = Job(
+            company=_text(row.get('company')),
+            title=_text(row.get('title')),
+            location=_text(row.get('location')) or 'Unknown',
+            source=_text(row.get('source')),
+        )
+        job.freshness = _text(row.get('freshness'))
+        if is_excluded(job):
+            reasons['excluded_role'] += 1
+        elif _text(row.get('seniority')) in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'} or classify_seniority(job.title) in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'}:
+            reasons['too_senior'] += 1
+        elif _truthy(row.get('location_verified')) and location_points(job) == 0:
+            reasons['outside_location'] += 1
+        elif is_stale(job):
+            reasons['stale'] += 1
+        else:
+            reasons['below_threshold'] += 1
+    return reasons
+
+
 def run_log_metrics(rows: list[dict]) -> list[tuple[str, Any]]:
     """Verification rates for the fields the pipeline is meant to obtain."""
     total = len(rows)
@@ -188,6 +218,7 @@ def run_log_metrics(rows: list[dict]) -> list[tuple[str, Any]]:
         ('location_verified_rate', _rate(sum(1 for row in rows if _truthy(row.get('location_verified'))), total)),
         ('salary_parsed_rate', _rate(salary_parsed, total)),
         ('cloud_fit_distribution', ', '.join(f'{label}: {count}' for label, count in sorted(distribution.items())) or 'none'),
+        ('rejection_reasons', rejection_reasons(rows)),
     ]
 
 
@@ -203,7 +234,7 @@ def _run_log_sheet(workbook: Workbook, rows: list[dict]) -> None:
     for offset, (name, value) in enumerate(metrics):
         excel_row = DATA_ROW + offset
         sheet.cell(row=excel_row, column=1, value=name).font = Font(bold=True)
-        sheet.cell(row=excel_row, column=2, value=value)
+        sheet.cell(row=excel_row, column=2, value=json.dumps(value, sort_keys=True) if isinstance(value, dict) else value)
         sheet.cell(row=excel_row, column=3, value=TARGETS.get(name, ''))
     _write_frame(sheet, 'Run Log', headers, widths, ('Value', 'Target'), len(metrics))
     sheet.freeze_panes = 'A4'
