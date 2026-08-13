@@ -215,7 +215,7 @@ def fetch_boards(boards: Iterable[Mapping[str, str]], fetch=fetch_json, sleep=ti
     jobs: list[Job] = []
     for index, board in enumerate(boards or []):
         ats, slug = str(board.get('ats') or ''), str(board.get('slug') or '')
-        if not ats or not slug:
+        if not ats or not slug or board.get('disabled'):
             continue
         if index:
             sleep(DELAY_BETWEEN_BOARDS)

@@ -18,7 +18,8 @@
     "slug": "mcgovern",
     "company": "Mcgovern",
     "last_ok": "2026-08-13",
-    "india_count": 0
+    "india_count": 0,
+    "disabled": true
   },
   {
     "ats": "lever",
@@ -32,28 +33,32 @@
     "slug": "voltai",
     "company": "Voltai",
     "last_ok": "2026-08-13",
-    "india_count": 0
+    "india_count": 0,
+    "disabled": true
   },
   {
     "ats": "lever",
     "slug": "innovativesol-2",
     "company": "Innovativesol 2",
     "last_ok": "2026-08-13",
-    "india_count": 0
+    "india_count": 0,
+    "disabled": true
   },
   {
     "ats": "lever",
     "slug": "cscgeneration-2",
     "company": "Cscgeneration 2",
     "last_ok": "2026-08-13",
-    "india_count": 0
+    "india_count": 0,
+    "disabled": true
   },
   {
     "ats": "lever",
     "slug": "pointclickcare",
     "company": "Pointclickcare",
     "last_ok": "2026-08-13",
-    "india_count": 0
+    "india_count": 0,
+    "disabled": true
   },
   {
     "ats": "lever",
@@ -102,7 +107,7 @@
     "slug": "weekdayworks",
     "company": "Weekdayworks",
     "last_ok": "2026-08-13",
-    "india_count": 45
+    "india_count": 47
   },
   {
     "ats": "lever",
@@ -123,6 +128,7 @@
     "slug": "reply",
     "company": "Reply",
     "last_ok": "2026-08-13",
-    "india_count": 0
+    "india_count": 0,
+    "disabled": true
   }
 ]

@@ -205,6 +205,13 @@ def score(job: Job) -> Job:
     if not job.experience_verified: concerns.append('Experience verification required')
     if too_senior: concerns.append(f'{job.seniority.title()} title exceeds target seniority')
     if corrupted: concerns.append('Critical field extraction corrupted')
+    if BOARD_API_MARKER in (job.source or '') and job.posting_date != 'Unknown':
+        try:
+            open_days = (date.today() - datetime.fromisoformat(job.posting_date.replace('Z', '+00:00')).date()).days
+        except ValueError:
+            open_days = 0
+        if open_days > 365:
+            concerns.append(f'Evergreen req — open {open_days} days, may not be a live opening')
     job.potential_concerns = '; '.join(concerns) or 'None observed'
     job.eligibility_status = 'REJECTED' if job.recommendation == 'DO NOT INCLUDE' else ('ELIGIBLE' if job.location_verified and job.experience_verified and job.original_url_verified else 'VERIFICATION REQUIRED')
     job.confidence = 'HIGH' if job.eligibility_status == 'ELIGIBLE' and job.posting_date_verified else ('MEDIUM' if job.original_url_verified and job.location_verified and job.experience_verified else 'LOW')

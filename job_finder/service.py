@@ -107,6 +107,29 @@ def discover_boards(settings, limit: int) -> dict[str, int]:
     return stats
 
 
+def prune_boards(settings) -> list[str]:
+    """Disable boards with no India-relevant postings without deleting history."""
+    boards_path = Path(getattr(settings, 'boards_path', BOARDS_PATH))
+    boards = load_boards(boards_path)
+    disabled = []
+    for board in boards:
+        try:
+            jobs = fetch_board(board['ats'], board['slug'])
+        except (HTTPError, URLError, TimeoutError, ValueError) as exc:
+            logging.warning('Could not prune-check %s/%s: %s', board['ats'], board['slug'], exc)
+            continue
+        board['last_ok'] = date.today().isoformat()
+        board['india_count'] = len(jobs)
+        if not jobs:
+            board['disabled'] = True
+            disabled.append(board['slug'])
+        else:
+            board.pop('disabled', None)
+    save_boards(boards, boards_path)
+    logging.info('Disabled zero-India boards: %s', ', '.join(disabled) or 'none')
+    return disabled
+
+
 def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int, int]:
     store = JobStore(getattr(settings, 'database_url', None) or settings.database_path)
     accepted = 0
