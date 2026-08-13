@@ -8,6 +8,19 @@ on:
     - cron: "30 9 * * *"    # 3:00 PM IST
     - cron: "30 16 * * *"   # 10:00 PM IST
     - cron: "50 4 * * *"    # TEMPORARY TEST: 10:20 AM IST
+    
+  # on:
+  # workflow_dispatch:
+
+  # schedule:
+  #   - cron: "0 8 * * *"
+  #     timezone: "Asia/Kolkata"
+
+  #   - cron: "0 15 * * *"
+  #     timezone: "Asia/Kolkata"
+
+  #   - cron: "0 22 * * *"
+  #     timezone: "Asia/Kolkata"
 
 jobs:
   job-finder:
