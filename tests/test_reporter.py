@@ -8,20 +8,71 @@ from tests.fixtures.report_rows import load_fixture
 
 
 class ReporterTests(unittest.TestCase):
-    def test_generate_report_creates_xlsx_and_hyperlinks(self):
+    def _build(self, rows):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        output = reporter.generate_report(rows, Path(directory.name))
+        return output, load_workbook(output)
+
+    def test_generate_report_creates_xlsx_with_three_sheets(self):
+        output, workbook = self._build(load_fixture())
+        self.assertTrue(output.exists())
+        self.assertEqual(workbook.sheetnames, ['Pipeline', 'Rejected', 'Run Log'])
+
+    def test_pipeline_layout_and_apply_hyperlink(self):
         rows = load_fixture()
-        with tempfile.TemporaryDirectory() as td:
-            outdir = Path(td)
-            output = reporter.generate_report(rows, outdir)
-            self.assertTrue(output.exists())
-            wb = load_workbook(output)
-            # Check that a sheet exists and that hyperlink cells contain hyperlinks
-            sheet = wb['Top Matches']
-            # Find first data row (row 4), original_url at column Z (26), application_url at AA (27)
-            orig_cell = sheet.cell(row=4, column=26)
-            app_cell = sheet.cell(row=4, column=27)
-            self.assertTrue(orig_cell.hyperlink is not None)
-            self.assertTrue(app_cell.hyperlink is not None)
+        _, workbook = self._build(rows)
+        sheet = workbook['Pipeline']
+        headers = [cell.value for cell in sheet[reporter.HEADER_ROW][:len(reporter.PIPELINE_HEADERS)]]
+        self.assertEqual(headers, list(reporter.PIPELINE_HEADERS))
+        self.assertEqual(sheet.freeze_panes, 'E4')
+        self.assertEqual(sheet.cell(row=4, column=1).value, 1)
+        self.assertEqual(sheet.cell(row=4, column=2).value, rows[0]['match_score'])
+
+        apply_cell = sheet.cell(row=4, column=reporter.PIPELINE_HEADERS.index('Apply') + 1)
+        self.assertIsNotNone(apply_cell.hyperlink)
+        self.assertEqual(apply_cell.hyperlink.target, rows[0]['application_url'])
+        self.assertLessEqual(len(apply_cell.value), reporter.APPLY_TEXT_LIMIT)
+
+    def test_column_widths_are_not_uniform(self):
+        _, workbook = self._build(load_fixture())
+        sheet = workbook['Pipeline']
+        self.assertEqual(sheet.column_dimensions['A'].width, 5)
+        self.assertEqual(sheet.column_dimensions['D'].width, 24)
+        self.assertEqual(sheet.column_dimensions['E'].width, 38)
+        self.assertEqual(sheet.column_dimensions['O'].width, 46)
+        self.assertEqual(sheet.column_dimensions['Q'].width, 46)
+        self.assertTrue(sheet.cell(row=4, column=5).alignment.wrap_text)
+
+    def test_rejected_rows_are_separated_from_pipeline(self):
+        rows = load_fixture() + [dict(load_fixture()[0], job_id='sample-2', match_score=12,
+                                      recommendation='DO NOT INCLUDE')]
+        _, workbook = self._build(rows)
+        self.assertEqual(workbook['Pipeline'].cell(row=4, column=4).value, rows[0]['company'])
+        self.assertIsNone(workbook['Pipeline'].cell(row=5, column=1).value)
+        self.assertEqual(workbook['Rejected'].cell(row=4, column=1).value, 12)
+
+    def test_run_log_reports_verification_rates(self):
+        rows = load_fixture() + [dict(load_fixture()[0], job_id='sample-2',
+                                      recommendation='DO NOT INCLUDE', salary='Not disclosed',
+                                      posting_date_verified=False, location_verified=False,
+                                      cloud_devops_match='Low')]
+        rows[0].update(posting_date_verified=True, location_verified=True, salary='18 LPA')
+        metrics = dict(reporter.run_log_metrics(rows))
+        self.assertEqual(metrics['rows_total'], 2)
+        self.assertEqual(metrics['rows_in_pipeline'], 1)
+        self.assertEqual(metrics['rows_rejected'], 1)
+        self.assertEqual(metrics['posting_date_verified_rate'], 0.5)
+        self.assertEqual(metrics['location_verified_rate'], 0.5)
+        self.assertEqual(metrics['salary_parsed_rate'], 0.5)
+        self.assertEqual(metrics['cloud_fit_distribution'], 'High: 1, Low: 1')
+
+        _, workbook = self._build(rows)
+        sheet = workbook['Run Log']
+        written = {sheet.cell(row=row, column=1).value: sheet.cell(row=row, column=2).value
+                   for row in range(4, 4 + len(metrics))}
+        self.assertEqual(written['rows_total'], 2)
+        self.assertEqual(written['salary_parsed_rate'], 0.5)
 
 
 if __name__ == '__main__':

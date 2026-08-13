@@ -7,8 +7,7 @@ on:
     - cron: "30 2 * * *"    # 8:00 AM IST
     - cron: "30 9 * * *"    # 3:00 PM IST
     - cron: "30 16 * * *"   # 10:00 PM IST
-    - cron: "50 4 * * *"    # TEMPORARY TEST: 10:20 AM IST
-    
+
   # on:
   # workflow_dispatch:
 
@@ -21,6 +20,10 @@ on:
 
   #   - cron: "0 22 * * *"
   #     timezone: "Asia/Kolkata"
+
+concurrency:
+  group: job-finder
+  cancel-in-progress: false
 
 jobs:
   job-finder:
@@ -67,6 +70,8 @@ jobs:
         run: |
           python -m job_finder collect --limit 50
 
+      # One email a day: only the last scheduled run finalizes. Manual runs always do.
       - name: Finalize report and send email
+        if: github.event_name != 'schedule' || github.event.schedule == '30 16 * * *'
         run: |
           python -m job_finder finalize

@@ -16,11 +16,34 @@ def _terms(text: str, vocabulary: set[str]) -> list[str]:
     return terms(text, vocabulary)
 
 
-def _years(experience: str) -> tuple[int | None, int | None]:
-    numbers = [int(n) for n in re.findall(r'\d+', experience or '')]
+def _years(experience: str) -> tuple[float | None, float | None]:
+    """Handles '24 months' (-> 2.0) and '1.5 yrs' (-> 1.5, not (1, 5))."""
+    if not experience or experience == 'Unknown':
+        return None, None
+    if 'month' in experience.lower():
+        m = re.search(r'(\d+(?:\.\d+)?)', experience)
+        v = round(float(m.group(1)) / 12, 2) if m else None
+        return (v, v)
+    numbers = [float(n) for n in re.findall(r'\d+(?:\.\d+)?', experience)]
     if not numbers:
         return None, None
     return (numbers[0], numbers[1] if len(numbers) > 1 else numbers[0])
+
+
+PREFERRED_LOCATIONS = tuple(p for p in LOCATIONS if p != 'india')
+
+
+def location_points(job: Job) -> int:
+    """Preferred city 10, elsewhere-in-India 5, non-India 0. Reads job.location
+    only — the description must not decide where the job is."""
+    loc = (job.location or '').lower().strip()
+    if not loc or loc == 'unknown':
+        return 0
+    if any(p in loc for p in PREFERRED_LOCATIONS):
+        return 10
+    if 'india' in loc:
+        return 5
+    return 0
 
 
 def freshness(posting_date: str) -> tuple[str, int]:
@@ -65,14 +88,14 @@ def score(job: Job) -> Job:
     role = 20 if any(role in job.title.lower() for role in TARGET_ROLES) else 0
     low, high = _years(job.experience)
     experience = 15 if low is None or (low <= 5 and (high is None or high >= 2)) else 0
-    location = 10 if any(place in text for place in LOCATIONS) else 0
+    location = location_points(job)
     job.cloud_devops_match, cloud_points, _core = cloud_match(text)
     company = 5 if any(term in (job.company + ' ' + job.description).lower() for term in PREFERRED_COMPANY_TERMS) else 2
     salary = 5 if any(marker in job.salary.lower() for marker in ('10', '12', '15', 'lpa', 'lakh')) and job.salary != 'Not disclosed' else 0
     job.freshness, fresh_points = freshness(job.posting_date)
     job.match_score = technical + role + experience + location + cloud_points + company + salary + fresh_points
     too_senior = job.seniority in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'}
-    outside_location = job.location_verified and not any(place in text for place in LOCATIONS)
+    outside_location = job.location_verified and location == 0
     if is_excluded(job) or too_senior or outside_location or job.freshness == 'Older than 14 days':
         job.recommendation = 'DO NOT INCLUDE'
     elif job.match_score >= 85:

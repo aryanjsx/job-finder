@@ -35,6 +35,22 @@ class ScoringTests(unittest.TestCase):
         bad = score(Job(company='Acme', title='Software Engineer', location='Mumbai, India', experience='2-5 years', posting_date='2026-08-12', original_url_verified=True))
         self.assertTrue(good.location_verified); self.assertEqual(bad.recommendation, 'DO NOT INCLUDE')
 
+    def test_months_are_not_read_as_years(self):
+        from job_finder.scoring import _years
+        self.assertEqual(_years("24 months"), (2.0, 2.0))
+        self.assertEqual(_years("18 months"), (1.5, 1.5))
+        self.assertEqual(_years("1.5 yrs"), (1.5, 1.5))
+        self.assertEqual(_years("3-16 yrs"), (3.0, 16.0))
+
+    def test_location_score_is_tiered_and_field_scoped(self):
+        from job_finder.scoring import location_points
+        mk = lambda loc: Job(company='A', title='Software Engineer', location=loc,
+                             description='we also have an office in india')
+        self.assertEqual(location_points(mk('Hyderabad, India')), 10)
+        self.assertEqual(location_points(mk('Bengaluru, India')), 5)
+        self.assertEqual(location_points(mk('Berlin, Germany')), 0)
+        self.assertEqual(location_points(mk('Unknown')), 0)
+
     def test_apply_immediately_requires_high_confidence(self):
         job = score(Job(company='Product Technology', title='Software Engineer', location='Hyderabad, India', experience='2-5 years', posting_date='Unknown', original_url_verified=True, description='Python Java React Azure Linux CI/CD Kubernetes Terraform'))
         self.assertEqual(job.confidence, 'MEDIUM')

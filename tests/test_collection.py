@@ -38,7 +38,7 @@ class CandidateNormalizationTests(unittest.TestCase):
 
 class CollectionCompatibilityTests(unittest.TestCase):
     def _settings(self, directory):
-        return SimpleNamespace(database_path=Path(directory) / 'jobs.db', firecrawl_api_key='test', firecrawl_base_url='https://api.example.com')
+        return SimpleNamespace(database_path=Path(directory) / 'jobs.db', firecrawl_api_key='test', firecrawl_base_url='https://api.example.com', boards_path=Path(directory) / 'no-boards.json')
 
     def test_collect_processes_string_and_dictionary_candidates(self):
         class FakeClient:

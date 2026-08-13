@@ -23,6 +23,7 @@ class Settings:
     database_path: Path
     database_url: str | None
     report_dir: Path
+    boards_path: Path
     email_enabled: bool
     smtp_host: str
     smtp_port: int
@@ -44,6 +45,7 @@ class Settings:
             database_path=Path(os.getenv('DATABASE_PATH', 'data/job_finder.db')),
             database_url=os.getenv('DATABASE_URL'),
             report_dir=Path(os.getenv('REPORT_DIR', 'reports')),
+            boards_path=Path(os.getenv('BOARDS_PATH', 'config/boards.json')),
             email_enabled=truthy(os.getenv('EMAIL_ENABLED', 'false')),
             smtp_host=os.getenv('SMTP_HOST', ''), smtp_port=int(os.getenv('SMTP_PORT', '587')),
             smtp_username=os.getenv('SMTP_USERNAME', ''), smtp_password=os.getenv('SMTP_PASSWORD', ''),
