@@ -1,0 +1,27 @@
+name: Discover Boards
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Search results to request
+        default: "60"
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: python -m pip install -r requirements.txt
+      - run: python -m job_finder discover-boards --limit ${{ inputs.limit }}
+      - name: Commit any new boards
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add config/boards.json
+          git diff --staged --quiet || git commit -m "chore: discovered ATS boards"
+          git push

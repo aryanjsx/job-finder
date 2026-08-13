@@ -38,7 +38,7 @@ class CandidateNormalizationTests(unittest.TestCase):
 
 class CollectionCompatibilityTests(unittest.TestCase):
     def _settings(self, directory):
-        return SimpleNamespace(database_path=Path(directory) / 'jobs.db', firecrawl_api_key='test', firecrawl_base_url='https://api.example.com')
+        return SimpleNamespace(database_path=Path(directory) / 'jobs.db', firecrawl_api_key='test', firecrawl_base_url='https://api.example.com', boards_path=Path(directory) / 'no-boards.json', run_metrics_path=Path(directory) / 'run.json')
 
     def test_collect_processes_string_and_dictionary_candidates(self):
         class FakeClient:
@@ -49,9 +49,10 @@ class CollectionCompatibilityTests(unittest.TestCase):
                 self.scraped.append(url)
                 return Job(company='Example Technology', title='Cloud Engineer', original_url=url, posting_date='2026-08-12', description='Python Azure CI/CD')
         with tempfile.TemporaryDirectory() as directory, patch('job_finder.service.FirecrawlClient', FakeClient):
-            discovered, stored = collect(self._settings(directory), 25)
+            discovered, stored, pipeline = collect(self._settings(directory), 25)
         self.assertEqual(discovered, 2)
         self.assertEqual(stored, 2)
+        self.assertEqual(pipeline, 0)
 
 
 class FirecrawlRequestTests(unittest.TestCase):
