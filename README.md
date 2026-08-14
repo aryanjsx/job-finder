@@ -1,4 +1,4 @@
-# Aryan Job Finder
+# Automated Job Finder
 
 An opinionated, privacy-conscious job discovery service. It searches live listings with Firecrawl, normalizes only observed facts, scores them against Aryan Kumar's profile, stores changes in SQLite, and creates a daily Excel report. It never applies to jobs.
 
