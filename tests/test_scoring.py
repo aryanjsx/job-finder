@@ -22,7 +22,7 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(scored.freshness, 'Unknown')
 
     def test_staff_and_principal_are_rejected(self):
-        for title in ('Staff Engineer', 'Principal Engineer'):
+        for title in ('Staff Engineer', 'Principal Engineer', 'Senior Software Engineer'):
             self.assertEqual(score(Job(company='Acme', title=title)).recommendation, 'DO NOT INCLUDE')
 
     def test_unknown_location_and_experience_cap_score(self):
@@ -44,6 +44,41 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(_years("18 months"), (1.5, 1.5))
         self.assertEqual(_years("1.5 yrs"), (1.5, 1.5))
         self.assertEqual(_years("3-16 yrs"), (3.0, 16.0))
+
+    def test_experience_gate_rejects_requirements_above_three_years(self):
+        from job_finder.scoring import rejection_reason
+        for requirement in ('4+ yrs', '5-8 yrs', '6 yrs'):
+            scored = score(Job(
+                company='Product Technology',
+                title='Software Engineer',
+                location='Hyderabad, India',
+                experience=requirement,
+                posting_date='2026-08-12',
+                original_url_verified=True,
+                description='Python Java React Azure Linux CI/CD Kubernetes Terraform',
+            ))
+            self.assertEqual(scored.recommendation, 'DO NOT INCLUDE')
+            self.assertEqual(rejection_reason(scored), 'too_much_experience')
+            self.assertIn('above the 3-year ceiling', scored.potential_concerns)
+
+    def test_experience_gate_accepts_two_year_candidate_stretches(self):
+        for requirement in ('2-4 yrs', '3+ yrs', '24 months', '0-1 yrs'):
+            scored = score(Job(
+                company='Product Technology',
+                title='Software Engineer',
+                location='Hyderabad, India',
+                experience=requirement,
+                posting_date='2026-08-12',
+                original_url_verified=True,
+                description='Python Java React Azure Linux CI/CD Kubernetes Terraform',
+            ))
+            self.assertNotEqual(scored.recommendation, 'DO NOT INCLUDE')
+
+    def test_unknown_experience_earns_no_points_but_is_not_rejected(self):
+        from job_finder.scoring import exceeds_experience, experience_points
+        job = Job(company='Product Technology', title='Software Engineer', experience='Unknown')
+        self.assertEqual(experience_points(job.experience), 0)
+        self.assertFalse(exceeds_experience(job))
 
     def test_location_score_is_tiered_and_field_scoped(self):
         from job_finder.scoring import location_points
