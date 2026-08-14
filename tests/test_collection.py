@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from io import BytesIO
@@ -53,6 +54,41 @@ class CollectionCompatibilityTests(unittest.TestCase):
         self.assertEqual(discovered, 2)
         self.assertEqual(stored, 2)
         self.assertEqual(pipeline, 0)
+
+    def test_collect_keeps_ats_results_when_firecrawl_credits_are_exhausted(self):
+        class CreditExhaustedClient:
+            def __init__(self, *_):
+                pass
+
+            def discover(self, _):
+                raise FirecrawlError(
+                    402, 'PAYMENT_REQUIRED', 'Insufficient credits', '', False, 'search',
+                )
+
+        def board_jobs(boards, *_args, **_kwargs):
+            if not boards:
+                return []
+            return [Job(
+                company='Example Technology',
+                title='Software Engineer',
+                location='Hyderabad, India',
+                experience='2 yrs',
+                original_url='https://jobs.example.com/123',
+                description='Python Java React Azure Linux CI/CD Kubernetes Terraform',
+            )]
+
+        with tempfile.TemporaryDirectory() as directory:
+            settings = self._settings(directory)
+            settings.boards_path.write_text(
+                json.dumps([{'ats': 'lever', 'slug': 'example'}]),
+                encoding='utf-8',
+            )
+            with patch('job_finder.service.FirecrawlClient', CreditExhaustedClient), \
+                    patch('job_finder.service.fetch_boards', board_jobs):
+                discovered, stored, pipeline = collect(settings, 25)
+        self.assertEqual(discovered, 1)
+        self.assertEqual(stored, 1)
+        self.assertEqual(pipeline, 1)
 
 
 class FirecrawlRequestTests(unittest.TestCase):
