@@ -15,7 +15,8 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
 from .models import Job
-from .scoring import classify_seniority, is_excluded, is_stale, location_points, salary_lpa
+from .scoring import (TOO_SENIOR_LEVELS, classify_seniority, exceeds_experience,
+                      is_excluded, is_stale, location_points, salary_lpa)
 
 HEADER_ROW = 3
 DATA_ROW = 4
@@ -181,7 +182,8 @@ def _rate(count: int, total: int) -> float:
 
 def rejection_reasons(rows: list[dict]) -> dict[str, int]:
     """Classify rejected rows by the same gate order used by scoring.score()."""
-    reasons = {key: 0 for key in ('excluded_role', 'too_senior', 'outside_location', 'stale', 'below_threshold')}
+    reasons = {key: 0 for key in ('excluded_role', 'too_senior', 'too_much_experience',
+                                  'outside_location', 'stale', 'below_threshold')}
     for row in rows:
         if not _is_rejected(row):
             continue
@@ -189,13 +191,17 @@ def rejection_reasons(rows: list[dict]) -> dict[str, int]:
             company=_text(row.get('company')),
             title=_text(row.get('title')),
             location=_text(row.get('location')) or 'Unknown',
+            experience=_text(row.get('experience')) or 'Unknown',
             source=_text(row.get('source')),
         )
         job.freshness = _text(row.get('freshness'))
         if is_excluded(job):
             reasons['excluded_role'] += 1
-        elif _text(row.get('seniority')) in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'} or classify_seniority(job.title) in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'}:
+        elif (_text(row.get('seniority')) in TOO_SENIOR_LEVELS
+              or classify_seniority(job.title) in TOO_SENIOR_LEVELS):
             reasons['too_senior'] += 1
+        elif exceeds_experience(job):
+            reasons['too_much_experience'] += 1
         elif _truthy(row.get('location_verified')) and location_points(job) == 0:
             reasons['outside_location'] += 1
         elif is_stale(job):

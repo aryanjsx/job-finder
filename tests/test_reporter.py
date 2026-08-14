@@ -82,6 +82,22 @@ class ReporterTests(unittest.TestCase):
         self.assertEqual(written['db_salary_parsed_rate'], 0.5)
         self.assertEqual(written['score_histogram'], '{"60-69": 1}')
 
+    def test_rejection_reasons_counts_excessive_experience(self):
+        rows = [{
+            'company': 'Acme',
+            'title': 'Software Engineer',
+            'location': 'Hyderabad, India',
+            'experience': '6 yrs',
+            'recommendation': 'DO NOT INCLUDE',
+            'seniority': 'MID',
+            'location_verified': True,
+            'freshness': '1-3 days',
+            'source': 'Lever board API (acme)',
+        }]
+        reasons = reporter.rejection_reasons(rows)
+        self.assertEqual(reasons['too_much_experience'], 1)
+        self.assertEqual(sum(reasons.values()), 1)
+
 
 if __name__ == '__main__':
     unittest.main()
