@@ -177,7 +177,16 @@ def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int
             return discovered, accepted, pipeline
 
         candidates = []
-        raw_candidates = list(client.discover(limit))
+        try:
+            raw_candidates = list(client.discover(limit))
+        except FirecrawlError as exc:
+            logging.warning(
+                'Skipping Firecrawl discovery after request failure; '
+                'retaining %s ATS listings: %s',
+                accepted,
+                exc,
+            )
+            return discovered, accepted, pipeline
         for raw_candidate in raw_candidates:
             candidate = normalize_candidate(raw_candidate)
             if not candidate:
