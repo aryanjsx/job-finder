@@ -30,6 +30,33 @@ def _years(experience: str) -> tuple[float | None, float | None]:
     return (numbers[0], numbers[1] if len(numbers) > 1 else numbers[0])
 
 
+MAX_YEARS_REQUIRED = 3.0
+IDEAL_YEARS = 2.0
+TOO_SENIOR_LEVELS = {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR', 'SENIOR'}
+
+
+def experience_min(experience: str) -> float | None:
+    """Return the stated minimum experience requirement, if one was extracted."""
+    return _years(experience)[0]
+
+
+def experience_points(experience: str) -> int:
+    """Score a stated requirement without inventing a fit for unknown experience."""
+    minimum = experience_min(experience)
+    if minimum is None:
+        return 0
+    if minimum <= IDEAL_YEARS:
+        return 15
+    if minimum <= MAX_YEARS_REQUIRED:
+        return 8
+    return 0
+
+
+def exceeds_experience(job: Job) -> bool:
+    minimum = experience_min(job.experience)
+    return minimum is not None and minimum > MAX_YEARS_REQUIRED
+
+
 INDIA_TOKENS = ('india', 'hyderabad', 'gurgaon', 'gurugram', 'noida', 'delhi', 'ncr',
                 'kolkata', 'bengaluru', 'bangalore', 'pune', 'chennai', 'mumbai')
 PREFERRED_CITIES = ('hyderabad', 'gurgaon', 'gurugram', 'noida', 'delhi', 'ncr', 'kolkata')
@@ -99,8 +126,10 @@ def rejection_reason(job: Job) -> str:
     """Return the first rejection gate that applies to an already-scored job."""
     if is_excluded(job):
         return 'excluded_role'
-    if job.seniority in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'}:
+    if job.seniority in TOO_SENIOR_LEVELS:
         return 'too_senior'
+    if exceeds_experience(job):
+        return 'too_much_experience'
     if job.location_verified and location_points(job) == 0:
         return 'outside_location'
     if is_stale(job):
@@ -170,17 +199,17 @@ def score(job: Job) -> Job:
     job.skill_gaps = skill_gaps(text, SKILLS)
     technical = min(30, round(30 * len(matched) / 6))
     role = role_points(job.title)
-    low, high = _years(job.experience)
-    experience = 15 if low is None or (low <= 5 and (high is None or high >= 2)) else 0
+    experience = experience_points(job.experience)
     location = location_points(job)
     job.cloud_devops_match, cloud_points, _core = cloud_match(text)
     company = 5 if any(term in (job.company + ' ' + job.description).lower() for term in PREFERRED_COMPANY_TERMS) else 2
     salary = salary_points(job.salary)
     job.freshness, fresh_points = freshness(job.posting_date, job.source)
     job.match_score = technical + role + experience + location + cloud_points + company + salary + fresh_points
-    too_senior = job.seniority in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'}
+    too_senior = job.seniority in TOO_SENIOR_LEVELS
+    too_much_experience = exceeds_experience(job)
     outside_location = job.location_verified and location == 0
-    if is_excluded(job) or too_senior or outside_location or is_stale(job):
+    if is_excluded(job) or too_senior or too_much_experience or outside_location or is_stale(job):
         job.recommendation = 'DO NOT INCLUDE'
     elif job.match_score >= 85:
         job.recommendation = 'APPLY IMMEDIATELY'
@@ -204,6 +233,8 @@ def score(job: Job) -> Job:
     if not job.location_verified: concerns.append('Location verification required')
     if not job.experience_verified: concerns.append('Experience verification required')
     if too_senior: concerns.append(f'{job.seniority.title()} title exceeds target seniority')
+    if too_much_experience:
+        concerns.append(f'Requires {job.experience}, above the {MAX_YEARS_REQUIRED:g}-year ceiling')
     if corrupted: concerns.append('Critical field extraction corrupted')
     if BOARD_API_MARKER in (job.source or '') and job.posting_date != 'Unknown':
         try:
