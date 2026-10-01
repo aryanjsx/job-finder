@@ -225,7 +225,8 @@ def run_log_metrics(rows: list[dict], run_metrics: dict | None = None) -> list[t
     metrics.extend((key, (run_metrics or {}).get(key, {} if key in {'run_rejection_reasons', 'score_histogram'} else 0))
                    for key in ('run_boards_fetched', 'run_listings_fetched', 'run_india_relevant',
                                'run_new_rows', 'run_updated_rows', 'run_rows_in_pipeline',
-                               'run_rejection_reasons', 'score_histogram'))
+                               'run_rejection_reasons', 'score_histogram',
+                               'boards_failed', 'boards_zero_india'))
     return metrics
 
 

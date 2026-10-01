@@ -21,6 +21,13 @@ SEARCH_QUERIES = [
     '(Cloud Engineer OR Platform Engineer OR Backend Engineer) (Hyderabad OR Gurgaon OR Noida OR Remote) jobs India',
     '(Software Engineer OR Full Stack Engineer) (Azure OR Python OR React) jobs India',
 ]
+BOARD_DISCOVERY_QUERIES = [
+    'site:jobs.lever.co (software engineer OR backend OR devops) India',
+    'site:boards.greenhouse.io (software engineer OR backend OR devops) India',
+    'site:jobs.ashbyhq.com (software engineer OR backend OR devops) India',
+    'site:jobs.lever.co (Bangalore OR Hyderabad OR Pune OR Gurugram) engineer',
+    'site:boards.greenhouse.io (Bangalore OR Hyderabad OR Pune OR Gurugram) engineer',
+]
 BLOCKED_DISCOVERY_HOSTS = {'linkedin.com', 'indeed.com', 'naukri.com', 'glassdoor.co.in', 'wellfound.com'}
 ATS_HOSTS = ('jobs.lever.co', 'boards.greenhouse.io', 'myworkdayjobs.com', 'jobs.ashbyhq.com', 'smartrecruiters.com')
 LOCATION_TERMS = ('hyderabad', 'gurgaon', 'gurugram', 'noida', 'delhi ncr', 'delhi', 'kolkata', 'india', 'remote')
@@ -122,9 +129,12 @@ class FirecrawlClient:
         return self._request('POST', path, payload, url, source)
 
     def discover(self, limit: int) -> list[SearchCandidate]:
+        return self.discover_queries(SEARCH_QUERIES, limit)
+
+    def discover_queries(self, queries: list[str], limit: int) -> list[SearchCandidate]:
         results: list[SearchCandidate] = []
-        for query in SEARCH_QUERIES:
-            data = self._post('/v2/search', {'query': query, 'limit': max(5, limit // len(SEARCH_QUERIES)), 'scrapeOptions': {'formats': ['markdown']}}, source='search')
+        for query in queries:
+            data = self._post('/v2/search', {'query': query, 'limit': max(5, limit // len(queries)), 'scrapeOptions': {'formats': ['markdown']}}, source='search')
             results.extend(item for raw in search_items(data) if (item := normalize_candidate(raw)))
         return results[:limit]
 
