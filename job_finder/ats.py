@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Iterable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -223,7 +223,13 @@ def fetch_boards(boards: Iterable[Mapping[str, str]], fetch=fetch_json, sleep=ti
             found = fetch_board(ats, slug, fetch, all_locations, metrics)
         except (HTTPError, URLError, TimeoutError, ValueError) as error:
             LOGGER.warning('Board fetch failed for %s/%s: %s', ats, slug, error)
+            if metrics is not None:
+                metrics['boards_failed'] += 1
             continue
+        board['last_ok'] = date.today().isoformat()
+        board['india_count'] = len(found)
+        if metrics is not None and board['india_count'] == 0:
+            metrics['boards_zero_india'] += 1
         jobs.extend(found)
     return jobs
 

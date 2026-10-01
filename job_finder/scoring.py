@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 
 from .extractors import cloud_match, skill_gaps, terms
 from .models import Job
-from .profile import CLOUD_SKILLS, LOCATIONS, PREFERRED_COMPANY_TERMS, SKILLS, TARGET_ROLES
+from .profile import CLOUD_SKILLS, LOCATIONS, PREFERRED_COMPANY_TERMS, ROLE_TIER_1, ROLE_TIER_2, ROLE_TIER_3, SKILLS
 
 
 def _text(job: Job) -> str:
@@ -147,6 +147,15 @@ def salary_points(raw: str) -> int:
     return 5 if lpa >= 12 else 3 if lpa >= 8 else 1
 
 
+def role_points(title: str) -> int:
+    """Tier 1 = 20, Tier 2 = 14, Tier 3 = 9. Word-boundary, so 'sre' does not
+    have to appear literally inside 'site reliability engineer'."""
+    for tier, points in ((ROLE_TIER_1, 20), (ROLE_TIER_2, 14), (ROLE_TIER_3, 9)):
+        if terms(title or '', tier):
+            return points
+    return 0
+
+
 def score(job: Job) -> Job:
     text = _text(job)
     job.seniority = classify_seniority(job.title)
@@ -159,8 +168,8 @@ def score(job: Job) -> Job:
     job.primary_skills = sorted(set(matched + cloud))
     job.matching_skills = matched
     job.skill_gaps = skill_gaps(text, SKILLS)
-    technical = min(30, round(30 * len(matched) / 8))
-    role = 20 if any(role in job.title.lower() for role in TARGET_ROLES) else 0
+    technical = min(30, round(30 * len(matched) / 6))
+    role = role_points(job.title)
     low, high = _years(job.experience)
     experience = 15 if low is None or (low <= 5 and (high is None or high >= 2)) else 0
     location = location_points(job)

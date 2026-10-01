@@ -52,7 +52,7 @@ class CollectionCompatibilityTests(unittest.TestCase):
             discovered, stored, pipeline = collect(self._settings(directory), 25)
         self.assertEqual(discovered, 2)
         self.assertEqual(stored, 2)
-        self.assertEqual(pipeline, 2)
+        self.assertEqual(pipeline, 0)
 
 
 class FirecrawlRequestTests(unittest.TestCase):

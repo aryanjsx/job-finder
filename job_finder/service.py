@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+from datetime import date
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 
-from .ats import fetch_boards, slugs_from_urls
+from .ats import fetch_board, fetch_boards, slugs_from_urls
 from .database import JobStore
-from .firecrawl import ATS_HOSTS, FirecrawlClient, FirecrawlError, normalize_candidate
+from .firecrawl import ATS_HOSTS, BOARD_DISCOVERY_QUERIES, FirecrawlClient, FirecrawlError, normalize_candidate
 from .scoring import rejection_reason, score
 
 BOARDS_PATH = Path('config/boards.json')
@@ -60,6 +62,51 @@ def save_run_metrics(metrics: dict, path: Path = RUN_METRICS_PATH) -> None:
         logging.warning('Could not write run metrics %s: %s', path, exc)
 
 
+def discover_boards(settings, limit: int) -> dict[str, int]:
+    """Search once, probe new ATS boards once, and retain only India-capable boards."""
+    boards_path = Path(getattr(settings, 'boards_path', BOARDS_PATH))
+    boards = load_boards(boards_path)
+    known = {(board['ats'], board['slug'].lower()) for board in boards}
+    stats = {'slugs_seen': 0, 'already_known': 0, 'probed': 0, 'kept': 0,
+             'dropped_for_no_india_roles': 0}
+    try:
+        client = FirecrawlClient(settings.firecrawl_api_key, settings.firecrawl_base_url,
+                                 getattr(settings, 'firecrawl_request_delay_seconds', 1.25),
+                                 getattr(settings, 'firecrawl_max_concurrency', 2))
+    except ValueError as exc:
+        stats = {'slugs_seen': 0, 'already_known': 0, 'probed': 0, 'kept': 0,
+                 'dropped_for_no_india_roles': 0}
+        logging.error('Board discovery skipped: %s', exc)
+        logging.info('Board discovery: slugs seen=0, already known=0, probed=0, kept=0, dropped-for-no-India-roles=0')
+        return stats
+    candidates = client.discover_queries(BOARD_DISCOVERY_QUERIES, limit)
+    seen = slugs_from_urls([candidate.url for candidate in candidates])
+    stats['slugs_seen'] = len(seen)
+    for board in seen:
+        if (board['ats'], board['slug'].lower()) in known:
+            stats['already_known'] += 1
+            continue
+        stats['probed'] += 1
+        try:
+            jobs = fetch_board(board['ats'], board['slug'])
+        except (HTTPError, URLError, TimeoutError, ValueError) as exc:
+            logging.warning('Could not probe %s/%s: %s', board['ats'], board['slug'], exc)
+            stats['dropped_for_no_india_roles'] += 1
+            continue
+        if not jobs:
+            stats['dropped_for_no_india_roles'] += 1
+            continue
+        board['india_count'] = len(jobs)
+        board['last_ok'] = date.today().isoformat()
+        boards.append(board)
+        known.add((board['ats'], board['slug'].lower()))
+        stats['kept'] += 1
+    save_boards(boards, boards_path)
+    logging.info('Board discovery: slugs seen=%s, already known=%s, probed=%s, kept=%s, dropped-for-no-India-roles=%s',
+                 stats['slugs_seen'], stats['already_known'], stats['probed'], stats['kept'], stats['dropped_for_no_india_roles'])
+    return stats
+
+
 def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int, int]:
     store = JobStore(getattr(settings, 'database_url', None) or settings.database_path)
     accepted = 0
@@ -74,6 +121,8 @@ def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int
         'run_rows_in_pipeline': 0,
         'run_rejection_reasons': Counter(),
         'score_histogram': Counter(),
+        'boards_failed': 0,
+        'boards_zero_india': 0,
     }
     boards_path = Path(getattr(settings, 'boards_path', BOARDS_PATH))
     run_path = Path(getattr(settings, 'run_metrics_path', RUN_METRICS_PATH))
@@ -95,6 +144,7 @@ def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int
         for job in fetch_boards(boards, all_locations=all_locations, metrics=run):
             discovered += 1
             store_scored(job)
+        save_boards(boards, boards_path)
         logging.info('ATS board APIs contributed %s listings from %s boards.', accepted, len(boards))
 
         try:
@@ -118,6 +168,8 @@ def collect(settings, limit: int, all_locations: bool = False) -> tuple[int, int
         learned_slugs = {(board['ats'], board['slug'].lower()) for board in learned}
         for job in fetch_boards(learned, all_locations=all_locations, metrics=run):
             store_scored(job)
+        if learned:
+            save_boards(boards + learned, boards_path)
         harvested = {(entry['ats'], entry['slug'].lower()) for entry in slugs_from_urls([c.url for c in candidates])}
         already_covered = {(b['ats'], b['slug'].lower()) for b in boards} | learned_slugs
 
