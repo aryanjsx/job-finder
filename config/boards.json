@@ -2,91 +2,127 @@
   {
     "ats": "lever",
     "slug": "jumpcloud",
-    "company": "Jumpcloud"
+    "company": "Jumpcloud",
+    "last_ok": "2026-08-13",
+    "india_count": 7
   },
   {
     "ats": "lever",
     "slug": "modeln",
-    "company": "Modeln"
+    "company": "Modeln",
+    "last_ok": "2026-08-13",
+    "india_count": 9
   },
   {
     "ats": "lever",
     "slug": "mcgovern",
-    "company": "Mcgovern"
+    "company": "Mcgovern",
+    "last_ok": "2026-08-13",
+    "india_count": 0
   },
   {
     "ats": "lever",
     "slug": "ion",
-    "company": "Ion"
+    "company": "Ion",
+    "last_ok": "2026-08-13",
+    "india_count": 5
   },
   {
     "ats": "lever",
     "slug": "voltai",
-    "company": "Voltai"
+    "company": "Voltai",
+    "last_ok": "2026-08-13",
+    "india_count": 0
   },
   {
     "ats": "lever",
     "slug": "innovativesol-2",
-    "company": "Innovativesol 2"
+    "company": "Innovativesol 2",
+    "last_ok": "2026-08-13",
+    "india_count": 0
   },
   {
     "ats": "lever",
     "slug": "cscgeneration-2",
-    "company": "Cscgeneration 2"
+    "company": "Cscgeneration 2",
+    "last_ok": "2026-08-13",
+    "india_count": 0
   },
   {
     "ats": "lever",
     "slug": "pointclickcare",
-    "company": "Pointclickcare"
+    "company": "Pointclickcare",
+    "last_ok": "2026-08-13",
+    "india_count": 0
   },
   {
     "ats": "lever",
     "slug": "thinkahead",
-    "company": "Thinkahead"
+    "company": "Thinkahead",
+    "last_ok": "2026-08-13",
+    "india_count": 54
   },
   {
     "ats": "lever",
     "slug": "perforce",
-    "company": "Perforce"
+    "company": "Perforce",
+    "last_ok": "2026-08-13",
+    "india_count": 2
   },
   {
     "ats": "lever",
     "slug": "coupa",
-    "company": "Coupa"
+    "company": "Coupa",
+    "last_ok": "2026-08-13",
+    "india_count": 16
   },
   {
     "ats": "lever",
     "slug": "kobie",
-    "company": "Kobie"
+    "company": "Kobie",
+    "last_ok": "2026-08-13",
+    "india_count": 13
   },
   {
     "ats": "lever",
     "slug": "gohighlevel",
-    "company": "Gohighlevel"
+    "company": "Gohighlevel",
+    "last_ok": "2026-08-13",
+    "india_count": 62
   },
   {
     "ats": "lever",
     "slug": "meesho",
-    "company": "Meesho"
+    "company": "Meesho",
+    "last_ok": "2026-08-13",
+    "india_count": 52
   },
   {
     "ats": "lever",
     "slug": "weekdayworks",
-    "company": "Weekdayworks"
+    "company": "Weekdayworks",
+    "last_ok": "2026-08-13",
+    "india_count": 45
   },
   {
     "ats": "lever",
     "slug": "peoplegrove",
-    "company": "Peoplegrove"
+    "company": "Peoplegrove",
+    "last_ok": "2026-08-13",
+    "india_count": 4
   },
   {
     "ats": "lever",
     "slug": "spreetail",
-    "company": "Spreetail"
+    "company": "Spreetail",
+    "last_ok": "2026-08-13",
+    "india_count": 7
   },
   {
     "ats": "lever",
     "slug": "reply",
-    "company": "Reply"
+    "company": "Reply",
+    "last_ok": "2026-08-13",
+    "india_count": 0
   }
 ]

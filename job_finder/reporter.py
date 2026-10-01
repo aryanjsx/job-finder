@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from datetime import date
@@ -13,6 +14,9 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
+from .models import Job
+from .scoring import classify_seniority, is_excluded, is_stale, location_points, salary_lpa
+
 HEADER_ROW = 3
 DATA_ROW = 4
 
@@ -24,14 +28,14 @@ STATUS_CHOICES = ('Not Applied', 'Applied', 'Referral Requested', 'Recruiter Rep
                   'Screen Scheduled', 'Round 1', 'Round 2', 'Offer', 'Rejected', 'Ghosted')
 
 PIPELINE_HEADERS = ('#', 'Score', 'Action', 'Company', 'Role', 'Experience', 'Location',
-                    'Mode', 'Salary', 'Posted', 'Age', 'Matching Skills', 'Skill Gaps',
+                    'Mode', 'Salary', 'Salary (LPA)', 'Posted', 'Age', 'Matching Skills', 'Skill Gaps',
                     'Cloud Fit', 'Why', 'Concerns', 'Apply', 'Status', 'Applied On', 'Notes')
 
 # Anything unlisted falls back to DEFAULT_WIDTH; the old sheet set all 30 to 15,
 # which is why long text columns rendered on top of each other.
 DEFAULT_WIDTH = 14
 PIPELINE_WIDTHS = {'#': 5, 'Score': 7, 'Action': 20, 'Company': 24, 'Role': 38,
-                   'Experience': 13, 'Location': 22, 'Mode': 10, 'Salary': 18,
+                   'Experience': 13, 'Location': 22, 'Mode': 10, 'Salary': 18, 'Salary (LPA)': 12,
                    'Posted': 12, 'Age': 14, 'Matching Skills': 30, 'Skill Gaps': 24,
                    'Cloud Fit': 10, 'Why': 46, 'Concerns': 32, 'Apply': 46,
                    'Status': 20, 'Applied On': 13, 'Notes': 30}
@@ -115,8 +119,10 @@ def _pipeline_sheet(workbook: Workbook, rows: list[dict]) -> None:
         excel_row = DATA_ROW + offset
         values = (offset + 1, _score(row), _text(row.get('recommendation')), _text(row.get('company')),
                   _text(row.get('title')), _text(row.get('experience')), _text(row.get('location')),
-                  _text(row.get('work_mode')), _text(row.get('salary')), _text(row.get('posting_date')),
-                  _text(row.get('freshness')), _text(row.get('matching_skills')),
+                  _text(row.get('work_mode')), _text(row.get('salary')),
+                  salary_lpa(_text(row.get('salary'))), _text(row.get('posting_date')),
+                  _text(row.get('freshness')),
+                  _text(row.get('matching_skills')),
                   _text(row.get('skill_gaps')), _text(row.get('cloud_devops_match')),
                   _text(row.get('why_it_matches')), _text(row.get('potential_concerns')),
                   None, 'Not Applied', None, None)
@@ -173,43 +179,76 @@ def _rate(count: int, total: int) -> float:
     return round(count / total, 2) if total else 0.0
 
 
-def run_log_metrics(rows: list[dict]) -> list[tuple[str, Any]]:
-    """Verification rates for the fields the pipeline is meant to obtain."""
+def rejection_reasons(rows: list[dict]) -> dict[str, int]:
+    """Classify rejected rows by the same gate order used by scoring.score()."""
+    reasons = {key: 0 for key in ('excluded_role', 'too_senior', 'outside_location', 'stale', 'below_threshold')}
+    for row in rows:
+        if not _is_rejected(row):
+            continue
+        job = Job(
+            company=_text(row.get('company')),
+            title=_text(row.get('title')),
+            location=_text(row.get('location')) or 'Unknown',
+            source=_text(row.get('source')),
+        )
+        job.freshness = _text(row.get('freshness'))
+        if is_excluded(job):
+            reasons['excluded_role'] += 1
+        elif _text(row.get('seniority')) in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'} or classify_seniority(job.title) in {'STAFF', 'PRINCIPAL', 'LEAD', 'MANAGER', 'DIRECTOR'}:
+            reasons['too_senior'] += 1
+        elif _truthy(row.get('location_verified')) and location_points(job) == 0:
+            reasons['outside_location'] += 1
+        elif is_stale(job):
+            reasons['stale'] += 1
+        else:
+            reasons['below_threshold'] += 1
+    return reasons
+
+
+def run_log_metrics(rows: list[dict], run_metrics: dict | None = None) -> list[tuple[str, Any]]:
+    """Whole-database quality metrics plus the separately persisted current run."""
     total = len(rows)
     pipeline = [row for row in rows if not _is_rejected(row)]
     salary_parsed = sum(1 for row in rows
                         if _text(row.get('salary')).strip() not in {'', 'Not disclosed', 'Unknown'})
     distribution = Counter(_text(row.get('cloud_devops_match')) or 'Unknown' for row in rows)
-    return [
-        ('rows_total', total),
-        ('rows_in_pipeline', len(pipeline)),
-        ('rows_rejected', total - len(pipeline)),
-        ('posting_date_verified_rate', _rate(sum(1 for row in rows if _truthy(row.get('posting_date_verified'))), total)),
-        ('location_verified_rate', _rate(sum(1 for row in rows if _truthy(row.get('location_verified'))), total)),
-        ('salary_parsed_rate', _rate(salary_parsed, total)),
-        ('cloud_fit_distribution', ', '.join(f'{label}: {count}' for label, count in sorted(distribution.items())) or 'none'),
+    metrics = [
+        ('db_rows_total', total),
+        ('db_rows_in_pipeline', len(pipeline)),
+        ('db_rows_rejected', total - len(pipeline)),
+        ('db_posting_date_verified_rate', _rate(sum(1 for row in rows if _truthy(row.get('posting_date_verified'))), total)),
+        ('db_location_verified_rate', _rate(sum(1 for row in rows if _truthy(row.get('location_verified'))), total)),
+        ('db_salary_parsed_rate', _rate(salary_parsed, total)),
+        ('db_cloud_fit_distribution', ', '.join(f'{label}: {count}' for label, count in sorted(distribution.items())) or 'none'),
+        ('db_rejection_reasons', rejection_reasons(rows)),
     ]
+    metrics.extend((key, (run_metrics or {}).get(key, {} if key in {'run_rejection_reasons', 'score_histogram'} else 0))
+                   for key in ('run_boards_fetched', 'run_listings_fetched', 'run_india_relevant',
+                               'run_new_rows', 'run_updated_rows', 'run_rows_in_pipeline',
+                               'run_rejection_reasons', 'score_histogram',
+                               'boards_failed', 'boards_zero_india'))
+    return metrics
 
 
-TARGETS = {'posting_date_verified_rate': '> 0.90', 'salary_parsed_rate': '> 0.20',
-           'cloud_fit_distribution': 'want a spread, not one bucket'}
+TARGETS = {'db_posting_date_verified_rate': '> 0.90', 'db_salary_parsed_rate': '> 0.20',
+           'db_cloud_fit_distribution': 'want a spread, not one bucket'}
 
 
-def _run_log_sheet(workbook: Workbook, rows: list[dict]) -> None:
+def _run_log_sheet(workbook: Workbook, rows: list[dict], run_metrics: dict | None = None) -> None:
     sheet = workbook.create_sheet('Run Log')
     headers = ('Metric', 'Value', 'Target')
     widths = {'Metric': 32, 'Value': 46, 'Target': 30}
-    metrics = run_log_metrics(rows)
+    metrics = run_log_metrics(rows, run_metrics)
     for offset, (name, value) in enumerate(metrics):
         excel_row = DATA_ROW + offset
         sheet.cell(row=excel_row, column=1, value=name).font = Font(bold=True)
-        sheet.cell(row=excel_row, column=2, value=value)
+        sheet.cell(row=excel_row, column=2, value=json.dumps(value, sort_keys=True) if isinstance(value, dict) else value)
         sheet.cell(row=excel_row, column=3, value=TARGETS.get(name, ''))
     _write_frame(sheet, 'Run Log', headers, widths, ('Value', 'Target'), len(metrics))
     sheet.freeze_panes = 'A4'
 
 
-def generate_report(rows: list[dict], report_dir: Path) -> Path:
+def generate_report(rows: list[dict], report_dir: Path, run_metrics: dict | None = None) -> Path:
     report_dir.mkdir(parents=True, exist_ok=True)
     output = report_dir / f'Aryan_Job_Report_{date.today().isoformat()}.xlsx'
 
@@ -218,6 +257,6 @@ def generate_report(rows: list[dict], report_dir: Path) -> Path:
     workbook.remove(workbook.active)
     _pipeline_sheet(workbook, [row for row in rows if not _is_rejected(row)])
     _rejected_sheet(workbook, [row for row in rows if _is_rejected(row)])
-    _run_log_sheet(workbook, rows)
+    _run_log_sheet(workbook, rows, run_metrics)
     workbook.save(output)
     return output

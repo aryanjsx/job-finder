@@ -34,8 +34,14 @@ class AtsTests(unittest.TestCase):
         self.assertFalse(job.posting_date_verified)
 
     def test_lever_location_falls_back_to_country(self):
-        job = lever_jobs('acme', [self.lever_posting(categories={}, country='IN')])[0]
+        job = lever_jobs('acme', [self.lever_posting(categories={}, country='IN')], all_locations=True)[0]
         self.assertEqual(job.location, 'IN')
+
+    def test_lever_keeps_india_roles_only_unless_all_locations_requested(self):
+        canada = self.lever_posting(categories={'location': 'Toronto, Canada'})
+        india = self.lever_posting(id='lever-2', categories={'location': 'Noida, India'})
+        self.assertEqual([job.location for job in lever_jobs('acme', [canada, india])], ['Noida, India'])
+        self.assertEqual(len(lever_jobs('acme', [canada, india], all_locations=True)), 2)
 
     def test_greenhouse_updated_at_is_never_a_verified_posting_date(self):
         payload = {
